@@ -1,0 +1,565 @@
+<template>
+  <div v-if="hasSelectedProfile" class="drawer-overlay" @click="handleOverlayClick">
+    <div class="drawer" @click.stop>
+      <ProfileHeader :profile="selectedProfile" @close="handleClose" />
+
+      <div class="drawer-content">
+        <!-- Edit Mode Toggle -->
+        <div class="section-header" v-if="canEdit">
+          <button @click="isEditing = !isEditing" class="btn-edit">
+            {{ isEditing ? 'Cancel Edit' : 'Edit' }}
+          </button>
+        </div>
+
+        <!-- Basic Information -->
+        <div class="section">
+          <h3>Basic Information</h3>
+          <div v-if="!isEditing" class="info-grid">
+            <div class="info-item">
+              <label>Status</label>
+              <span :class="['status-badge', `status-${selectedProfile.status || 'active'}`]">
+                {{ selectedProfile.status || 'active' }}
+              </span>
+            </div>
+            <div class="info-item">
+              <label>Owner</label>
+              <span>{{ selectedProfile.ownerUserId?.name || selectedProfile.ownerUserId?.email || 'N/A' }}</span>
+            </div>
+            <div class="info-item">
+              <label>Group</label>
+              <span>{{ formatGroupLabel(selectedProfile.group) }}</span>
+            </div>
+            <div class="info-item">
+              <label>Created</label>
+              <span>{{ formatDate(selectedProfile.createdAt) }}</span>
+            </div>
+          </div>
+
+          <!-- Edit Form -->
+          <form v-else @submit.prevent="handleUpdate" class="edit-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Name *</label>
+                <input v-model="editForm.name" type="text" required />
+              </div>
+              <div class="form-group">
+                <label>Status</label>
+                <select v-model="editForm.status">
+                  <option value="active">Active</option>
+                  <option value="archived">Archived</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-group">
+                <label>Group</label>
+                <select v-model="editForm.group">
+                  <option v-for="opt in entityGroupOptions" :key="opt.value" :value="opt.value">
+                    {{ opt.label }}
+                  </option>
+                </select>
+              </div>
+            <div class="form-actions">
+              <button type="button" @click="isEditing = false" class="btn-cancel">Cancel</button>
+              <button type="submit" :disabled="saving" class="btn-save">
+                {{ saving ? 'Saving...' : 'Save' }}
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Contact Information -->
+        <div class="section">
+          <h3>Contact Information</h3>
+          <div v-if="!isEditing" class="info-grid">
+            <div class="info-item">
+              <label>Email</label>
+              <span>{{ displayEmail }}</span>
+            </div>
+            <div class="info-item">
+              <label>Phone</label>
+              <span>{{ displayPhone }}</span>
+            </div>
+            <div class="info-item">
+              <label>Country</label>
+              <span>{{ selectedProfile.country || 'N/A' }}</span>
+            </div>
+            <div class="info-item">
+              <label>Address</label>
+              <span>{{ displayAddress }}</span>
+            </div>
+          </div>
+
+          <!-- Edit Form -->
+          <form v-else @submit.prevent="handleUpdate" class="edit-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label>Email</label>
+                <input v-model="editForm.email" type="email" placeholder="client@example.com" />
+              </div>
+              <div class="form-group">
+                <label>Phone</label>
+                <input v-model="editForm.phone" type="text" placeholder="+1234567890" />
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Country</label>
+                <input v-model="editForm.country" type="text" placeholder="USA" />
+              </div>
+              <div class="form-group">
+                <label>Address</label>
+                <input v-model="editForm.address" type="text" placeholder="123 Main Street" />
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <!-- Social Links -->
+        <div
+          v-if="selectedProfile.socialLinks && (selectedProfile.socialLinks.linkedin || selectedProfile.socialLinks.github || selectedProfile.socialLinks.website)"
+          class="section">
+          <h3>Social Links</h3>
+          <div class="social-links">
+            <a v-if="selectedProfile.socialLinks.linkedin" :href="selectedProfile.socialLinks.linkedin" target="_blank"
+              rel="noopener noreferrer" class="social-link">
+              🔗 LinkedIn
+            </a>
+            <a v-if="selectedProfile.socialLinks.github" :href="selectedProfile.socialLinks.github" target="_blank"
+              rel="noopener noreferrer" class="social-link">
+              🔗 GitHub
+            </a>
+            <a v-if="selectedProfile.socialLinks.website" :href="selectedProfile.socialLinks.website" target="_blank"
+              rel="noopener noreferrer" class="social-link">
+              🔗 Website
+            </a>
+            <a v-for="(link, index) in (selectedProfile.socialLinks.other || [])" :key="index" :href="link"
+              target="_blank" rel="noopener noreferrer" class="social-link">
+              🔗 Other
+            </a>
+          </div>
+        </div>
+
+        <!-- Professional Information -->
+        <div v-if="selectedProfile.experience || selectedProfile.education" class="section">
+          <h3>Professional Information</h3>
+          <div v-if="selectedProfile.experience" class="info-item">
+            <label>Experience</label>
+            <div class="text-content">{{ selectedProfile.experience }}</div>
+          </div>
+          <div v-if="selectedProfile.education" class="info-item">
+            <label>Education</label>
+            <div class="text-content">{{ selectedProfile.education }}</div>
+          </div>
+        </div>
+
+        <!-- Sensitive Fields (Owner/Admin only) -->
+        <div v-if="showSensitiveFields" class="section">
+          <h3>Sensitive Information</h3>
+          <div class="info-grid">
+            <div v-if="selectedProfile.bankAccount" class="info-item">
+              <label>Bank Account</label>
+              <span>{{ selectedProfile.bankAccount }}</span>
+            </div>
+            <div v-if="selectedProfile.idNumber" class="info-item">
+              <label>ID Number</label>
+              <span>{{ selectedProfile.idNumber }}</span>
+            </div>
+            <div v-if="selectedProfile.driverLicenseNumber" class="info-item">
+              <label>Driver License</label>
+              <span>{{ selectedProfile.driverLicenseNumber }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tags -->
+        <div v-if="selectedProfile.tags && selectedProfile.tags.length > 0" class="section">
+          <h3>Tags</h3>
+          <div class="tags-list">
+            <span v-for="tag in selectedProfile.tags" :key="tag" class="tag">{{ tag }}</span>
+          </div>
+        </div>
+
+        <!-- Notes -->
+        <div v-if="selectedProfile.notes" class="section">
+          <h3>Notes</h3>
+          <div class="text-content">{{ selectedProfile.notes }}</div>
+        </div>
+
+        <!-- Profile Picture -->
+        <ProfilePicture v-if="canEdit" :profile="selectedProfile" />
+
+        <!-- Attachments -->
+        <ProfileAttachments :profile="selectedProfile" :can-edit="canEdit" />
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, watch } from 'vue';
+import { useStore } from 'vuex';
+import { useAuthStore } from '../../../composables/useAuth';
+import { normalizeRole, ROLES } from '../../../constants/roles.js';
+import { ENTITY_GROUP_OPTIONS, formatGroupLabel, DEFAULT_ENTITY_GROUP } from '../../../constants/groups.js';
+import ProfileHeader from './ProfileHeader.vue';
+import ProfilePicture from './ProfilePicture.vue';
+import ProfileAttachments from './ProfileAttachments.vue';
+
+const entityGroupOptions = ENTITY_GROUP_OPTIONS;
+const store = useStore();
+const authStore = useAuthStore();
+
+const selectedProfile = computed(() => store.getters['jobProfiles/selectedProfile']);
+const hasSelectedProfile = computed(() => store.getters['jobProfiles/hasSelectedProfile']);
+
+const isEditing = ref(false);
+const saving = ref(false);
+
+const canEdit = computed(() => {
+  const profile = selectedProfile.value;
+  if (!profile || !authStore.user) return false;
+
+  const userRole = normalizeRole(authStore.user.role, authStore.user.degree);
+
+  if (profile.ownerUserId?._id === authStore.user._id ||
+    profile.ownerUserId === authStore.user._id) {
+    return true;
+  }
+
+  if (userRole === ROLES.GROUP_BOSS || userRole === ROLES.SUPER_ADMIN) {
+    return true;
+  }
+
+  return false;
+});
+
+const showSensitiveFields = computed(() => {
+  const profile = selectedProfile.value;
+  if (!profile || !authStore.user) return false;
+
+  const userRole = normalizeRole(authStore.user.role, authStore.user.degree);
+
+  if (profile.ownerUserId?._id === authStore.user._id ||
+    profile.ownerUserId === authStore.user._id) {
+    return true;
+  }
+
+  if (userRole === ROLES.SUPER_ADMIN) {
+    return true;
+  }
+
+  return false;
+});
+
+const displayEmail = computed(() => {
+  const profile = selectedProfile.value;
+  if (!profile || !profile.email) return 'N/A';
+  if (showSensitiveFields.value) return profile.email;
+  return profile.email;
+});
+
+const displayPhone = computed(() => {
+  const profile = selectedProfile.value;
+  if (!profile || !profile.phone) return 'N/A';
+  if (showSensitiveFields.value) return profile.phone;
+  return profile.phone;
+});
+
+const displayAddress = computed(() => {
+  const profile = selectedProfile.value;
+  if (!profile || !profile.address) return 'N/A';
+  if (showSensitiveFields.value) return profile.address;
+  return profile.address;
+});
+
+const editForm = ref({
+  name: '',
+  status: 'active',
+  group: DEFAULT_ENTITY_GROUP,
+  email: '',
+  phone: '',
+  country: '',
+  address: ''
+});
+
+watch(() => selectedProfile.value, (newProfile) => {
+  if (newProfile) {
+    editForm.value = {
+      name: newProfile.name || '',
+      status: newProfile.status || 'active',
+      group: newProfile.group || DEFAULT_ENTITY_GROUP,
+      email: newProfile.email || '',
+      phone: newProfile.phone || '',
+      country: newProfile.country || '',
+      address: newProfile.address || ''
+    };
+  } else {
+    isEditing.value = false;
+  }
+}, { immediate: true });
+
+const formatDate = (date) => {
+  if (!date) return 'N/A';
+  return new Date(date).toLocaleDateString();
+};
+
+const handleUpdate = async () => {
+  const profile = selectedProfile.value;
+  if (!profile) return;
+
+  saving.value = true;
+  try {
+    await store.dispatch('jobProfiles/updateProfile', {
+      profileId: profile._id || profile.id,
+      profileData: editForm.value
+    });
+    isEditing.value = false;
+  } catch (error) {
+    alert(error.message || 'Failed to update profile');
+  } finally {
+    saving.value = false;
+  }
+};
+
+const handleClose = () => {
+  isEditing.value = false;
+  store.dispatch('jobProfiles/clearSelectedProfile');
+};
+
+const handleOverlayClick = () => {
+  handleClose();
+};
+</script>
+
+<style scoped>
+.drawer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  z-index: 1000;
+}
+
+.drawer {
+  width: 500px;
+  max-width: 500px;
+  height: 100vh;
+  background: var(--bg-primary);
+  box-shadow: var(--shadow-xl);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+@media (max-width: 600px) {
+  .drawer {
+    width: calc(100vw - 40px);
+    max-width: calc(100vw - 40px);
+  }
+}
+
+.drawer-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 30px;
+  background: var(--bg-primary);
+}
+
+.section-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 20px;
+}
+
+.btn-edit {
+  padding: 8px 16px;
+  background: var(--color-primary);
+  color: var(--text-inverse);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+
+.btn-edit:hover {
+  background: var(--color-primary-dark);
+}
+
+.section {
+  margin-bottom: 30px;
+  padding-bottom: 30px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.section:last-child {
+  border-bottom: none;
+}
+
+.section h3 {
+  margin: 0 0 16px 0;
+  color: var(--text-primary);
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.info-item label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.info-item span {
+  color: var(--text-primary);
+}
+
+.text-content {
+  color: var(--text-primary);
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.status-active {
+  background: #2ecc71;
+  color: white;
+}
+
+.status-archived {
+  background: #95a5a6;
+  color: white;
+}
+
+.social-links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.social-link {
+  color: var(--color-primary);
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: color 0.2s;
+}
+
+.social-link:hover {
+  color: var(--color-primary-dark);
+  text-decoration: underline;
+}
+
+.tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tag {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+}
+
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-group label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  padding: 8px 12px;
+  border: 1px solid var(--border-medium);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.btn-cancel,
+.btn-save {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s;
+}
+
+.btn-cancel {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-medium);
+}
+
+.btn-cancel:hover {
+  background: var(--bg-secondary);
+}
+
+.btn-save {
+  background: var(--color-success);
+  color: var(--text-inverse);
+}
+
+.btn-save:hover:not(:disabled) {
+  background: var(--color-success-light);
+}
+
+.btn-save:disabled {
+  background: var(--bg-tertiary);
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+}
+</style>

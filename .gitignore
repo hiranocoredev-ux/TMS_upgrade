@@ -1,0 +1,64 @@
+# Dependencies
+node_modules/
+server/node_modules/
+client/node_modules/
+
+# Environment variables
+.env
+server/.env
+client/.env
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+dist/
+server/dist/
+client/dist/
+client/build/
+
+# Uploads
+server/uploads/
+!server/uploads/.gitkeep
+server/uploads/**/*
+!.gitkeep
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+.cache/
+
+# OneNote notebook files
+*.onetoc2
+
+# Stale copy of the Vue client inside the server (the real client is in client/)
+server/src/App.vue
+server/src/main.js
+server/src/ckeditor5.css
+server/src/ckeditor5.umd.js
+server/src/views/
+server/src/components/
+server/src/store/
+server/src/router/
+server/src/layouts/
+server/src/composables/
+server/src/styles/
+server/src/types/
+server/src/assets/
+
+
+# Claude Code local files
+.claude/

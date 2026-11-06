@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <radialGradient id="gf" cx="44" cy="40" r="62" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#fff6d6"/>
+      <stop offset=".48" stop-color="#f3cc55"/>
+      <stop offset=".8" stop-color="#cf9518"/>
+      <stop offset="1" stop-color="#9a6a08"/>
+    </radialGradient>
+    <linearGradient id="gs" x1="24" y1="12" x2="98" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity=".5"/>
+      <stop offset=".38" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#6f4c05" stop-opacity=".28"/>
+    </linearGradient>
+    <radialGradient id="gr" cx="60" cy="60" r="60" gradientUnits="userSpaceOnUse">
+      <stop offset=".85" stop-color="#e7b41f"/>
+      <stop offset=".9" stop-color="#875c07"/>
+      <stop offset=".955" stop-color="#f8e08c"/>
+      <stop offset="1" stop-color="#8f6309"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Rim + reeded (milled) edge -->
+  <circle cx="60" cy="60" r="59" fill="url(#gr)"/>
+  <circle cx="60" cy="60" r="55" fill="none" stroke="#6f4c05" stroke-width="8" stroke-dasharray="1.5 2" opacity=".42"/>
+
+  <!-- Field with metallic sheen -->
+  <circle cx="60" cy="60" r="50" fill="url(#gf)"/>
+  <circle cx="60" cy="60" r="50" fill="url(#gs)"/>
+
+  <!-- Beaded inner ring -->
+  <circle cx="60" cy="60" r="44" fill="none" stroke="#9a6a08" stroke-width="2.6" stroke-dasharray=".4 3.1" stroke-linecap="round" opacity=".7"/>
+  <circle cx="60" cy="60" r="39" fill="none" stroke="#b98613" stroke-width="1" opacity=".5"/>
+
+  <!-- Embossed $ (shadow + highlight + face) -->
+  <g font-family="Georgia,'Times New Roman',serif" font-weight="bold" font-size="50" text-anchor="middle">
+    <text x="61" y="79.5" fill="#6f4c05" opacity=".85">$</text>
+    <text x="59" y="76.5" fill="#fff7db" opacity=".9">$</text>
+    <text x="60" y="78" fill="#d7a42a">$</text>
+  </g>
+
+  <!-- Specular highlight -->
+  <ellipse cx="45" cy="37" rx="24" ry="13" fill="#ffffff" opacity=".32"/>
+</svg>

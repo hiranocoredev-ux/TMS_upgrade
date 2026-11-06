@@ -1,0 +1,277 @@
+/* Canvas-style ticket board for plan & report submit pages */
+
+.period-ticket-board {
+  --board-gap: 1rem;
+  --card-radius: 14px;
+  width: 100%;
+}
+
+.period-ticket-board__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.period-ticket-board__title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.period-ticket-board__hint {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-tertiary);
+  max-width: 42rem;
+}
+
+.period-ticket-board__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
+  gap: var(--board-gap);
+  align-items: start;
+}
+
+.period-ticket-board__empty,
+.period-ticket-board__loading,
+.period-ticket-board__error {
+  padding: 2rem 1.25rem;
+  text-align: center;
+  border-radius: var(--card-radius);
+  border: 1px dashed var(--border-medium);
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+  font-size: 0.9rem;
+}
+
+.period-ticket-board__error {
+  color: #b91c1c;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.period-ticket-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+  border-radius: var(--card-radius);
+  border: 1px solid var(--border-light);
+  background: var(--bg-primary);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 4px 14px rgba(15, 23, 42, 0.04);
+  overflow: hidden;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.period-ticket-card:hover {
+  box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+}
+
+.period-ticket-card--plan {
+  border-top: 3px solid var(--color-primary);
+}
+
+.period-ticket-card--report-checked {
+  border-top: 3px solid #16a34a;
+}
+
+.period-ticket-card--report-unchecked {
+  border-top: 3px solid #d97706;
+}
+
+.period-ticket-card--report-neutral {
+  border-top: 3px solid #94a3b8;
+}
+
+.period-ticket-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem 0.5rem;
+  background: linear-gradient(180deg, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+  border-bottom: 1px solid var(--border-light);
+}
+
+.period-ticket-card__title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 650;
+  color: var(--text-primary);
+  line-height: 1.35;
+  flex: 1;
+}
+
+.period-ticket-card__title-input {
+  flex: 1;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+  width: 100%;
+}
+
+.period-ticket-card__tools {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.period-ticket-card__status-group {
+  display: inline-flex;
+  border-radius: 10px;
+  border: 1px solid var(--border-light);
+  overflow: hidden;
+  background: var(--bg-tertiary);
+}
+
+.period-ticket-card__status-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.period-ticket-card__status-btn:hover:not(:disabled) {
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.period-ticket-card__status-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.period-ticket-card__status-btn.is-active.is-yes {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.period-ticket-card__status-btn.is-active.is-no {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
+.period-ticket-card__percent-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0 1rem 0.65rem;
+}
+
+.period-ticket-card__percent-label {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.period-ticket-card__percent-input {
+  width: 4rem;
+  padding: 0.3rem 0.45rem;
+  border: 1px solid var(--border-medium);
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.period-ticket-card__percent-bar {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  overflow: hidden;
+}
+
+.period-ticket-card__percent-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-primary), #22c55e);
+  transition: width 0.25s ease;
+}
+
+.period-ticket-card__plan-block {
+  margin: 0 1rem 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-left: 3px solid var(--color-primary);
+}
+
+.period-ticket-card__plan-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+.period-ticket-card__plan-body {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.period-ticket-card__plan-body :deep(p) {
+  margin: 0 0 0.5rem;
+}
+
+.period-ticket-card__plan-empty {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.period-ticket-card__work {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 0 1rem 1rem;
+  min-height: 140px;
+}
+
+.period-ticket-card__work-label {
+  margin: 0 0 0.4rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+}
+
+.period-ticket-card__remove {
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  cursor: pointer;
+  padding: 0.25rem 0.4rem;
+}
+
+.period-ticket-card__remove:hover {
+  color: #b91c1c;
+}
+
+.period-ticket-board__add {
+  margin-top: 1rem;
+}
