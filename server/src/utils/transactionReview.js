@@ -9,7 +9,8 @@
  *   approved --(super admin unlocks, with reason)--> awaiting_fm
  *
  * Totals are unaffected: they still follow the Accepted / Pending / Canceled status.
- * Transactions created before the review existed have no stage: approved & locked.
+ * Transactions created before the review existed have no stage: they wait for
+ * Finance Manager approval like new ones.
  */
 import { normalizeRole, ROLES } from '../constants/roles.js';
 
@@ -22,7 +23,8 @@ export const REVIEW = Object.freeze({
 
 const UNDER_REVIEW = [REVIEW.AWAITING_FM, REVIEW.FM_APPROVED];
 
-export const reviewStageOf = (tx) => tx?.reviewStage || REVIEW.APPROVED;
+/** Stage of a transaction; older ones without a stage are awaiting the Finance Manager. */
+export const reviewStageOf = (tx) => tx?.reviewStage || REVIEW.AWAITING_FM;
 
 export const isLocked = (tx) => reviewStageOf(tx) === REVIEW.APPROVED;
 

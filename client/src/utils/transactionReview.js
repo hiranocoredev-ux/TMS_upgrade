@@ -6,7 +6,8 @@
  *   either reviewer may reject (with a reason) -> rejected; editing resubmits
  *   a super admin may unlock an approved one (with a reason) -> awaiting_fm
  *
- * Transactions created before the review existed have no stage: approved & locked.
+ * Transactions created before the review existed have no stage: they wait for
+ * Finance Manager approval like new ones.
  * The server enforces all of this; the client only decides which buttons to show.
  */
 import { normalizeRole, ROLES } from '../constants/roles';
@@ -20,7 +21,7 @@ export const REVIEW = Object.freeze({
 
 const UNDER_REVIEW = [REVIEW.AWAITING_FM, REVIEW.FM_APPROVED];
 
-export const reviewStageOf = (tx) => tx?.reviewStage || REVIEW.APPROVED;
+export const reviewStageOf = (tx) => tx?.reviewStage || REVIEW.AWAITING_FM;
 export const isLocked = (tx) => reviewStageOf(tx) === REVIEW.APPROVED;
 
 const roleOf = (user) => normalizeRole(user?.role, user?.degree);
@@ -60,7 +61,9 @@ export const reviewBadge = (tx) => {
     return {
       key: 'awaiting',
       label: isFrozenSubmission(tx) ? 'Submitted · awaiting FM' : 'Awaiting FM',
-      title: 'Waiting for Finance Manager approval',
+      title: tx?.reviewStage
+        ? 'Waiting for Finance Manager approval'
+        : 'Created before the approval workflow — waiting for Finance Manager approval',
     };
   }
   if (stage === REVIEW.FM_APPROVED) {
@@ -83,9 +86,7 @@ export const reviewBadge = (tx) => {
   return {
     key: 'locked',
     label: 'Approved · Locked',
-    title: tx.reviewStage
-      ? `Fully approved${admin ? ` by ${admin}` : ''}${tx.adminApprovedAt ? ` on ${dayOf(tx.adminApprovedAt)}` : ''} — locked`
-      : 'Created before the approval workflow — treated as approved and locked',
+    title: `Fully approved${admin ? ` by ${admin}` : ''}${tx.adminApprovedAt ? ` on ${dayOf(tx.adminApprovedAt)}` : ''} — locked`,
   };
 };
 

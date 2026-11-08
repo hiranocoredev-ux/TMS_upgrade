@@ -120,7 +120,7 @@ const financeTransactionSchema = new mongoose.Schema({
    *               -> (super admin approves)     approved = locked
    *   either reviewer may reject -> rejected (editable again; saving resubmits)
    * No default on purpose: transactions created before the review existed have
-   * no stage and are treated as approved & locked.
+   * no stage and are treated as awaiting Finance Manager approval.
    */
   reviewStage: {
     type: String,

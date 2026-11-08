@@ -1187,9 +1187,9 @@ const reviewReasonSchema = z.object({
     .max(MAX_REVIEW_REASON_LENGTH, `Reason must be at most ${MAX_REVIEW_REASON_LENGTH} characters`),
 });
 
-/** Match transactions at one of `stages`; transactions from before the review count as approved. */
+/** Match transactions at one of `stages`; transactions from before the review count as awaiting FM. */
 const reviewStageFilter = (stages) =>
-  stages.includes(REVIEW.APPROVED)
+  stages.includes(REVIEW.AWAITING_FM)
     ? { $or: [{ reviewStage: { $in: stages } }, { reviewStage: { $exists: false } }, { reviewStage: null }] }
     : { reviewStage: { $in: stages } };
 
