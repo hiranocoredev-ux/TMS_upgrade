@@ -362,10 +362,11 @@
           <template v-else>
             <p class="sz-note">
               <strong>WorkTime:</strong> Real = the same target % as Worktime Management for this week
-              (holidays included, added time counted). Final = (Real − 95) × 20, kept between 0% and 100%:
-              Real 95% or less gives 0%, 97.5% gives 50%, 100% gives 100%. Group rows show the members' average Final %.
+              (holidays included, added time counted). From 95% up, Final = (Real − 95) × 20, capped at 100%:
+              95% gives 0%, 97.5% gives 50%, 100% gives 100%. Under 95%, Final = Real − 95, a negative score:
+              85.9% gives −9.1%. Group rows show the members' average Final %.
               Super admin can take 1% at a time off a member's Final % for the week (shown as "−N%" under it);
-              it never goes below 0%, and the reduced value is what Total and the rankings use.
+              the reduced value, which can go below 0%, is what Total and the rankings use.
             </p>
             <p class="sz-note">
               <strong>Weekly counts</strong> are entered per week by super admin, per member and per group.
@@ -447,7 +448,7 @@ const COLUMN = {
     section: 'WorkTime',
     sortable: true,
     cls: 'c-section-start c-worktime',
-    rules: ['Final = (Real − 95) × 20'],
+    rules: ['Final = (Real − 95) × 20', 'Under 95: Real − 95'],
     title: 'WorkTime: Final % from the Real target % (Worktime Management)'
   },
   calls: {
@@ -762,7 +763,7 @@ function moneyCell(row, key, isMember = false) {
 /* ===============================
    SCORING
 ================================ */
-/** Final % = (Real − 95) × 20, kept within 0–100 (see utils/worktimeMetrics). */
+/** Final % = (Real − 95) × 20 up to 100%, or Real − 95 (negative) under 95% (see utils/worktimeMetrics). */
 const worktimeFinal = (real) => worktimeFinalPercent(real);
 
 /**
@@ -830,7 +831,8 @@ const allGroups = computed(() =>
       // Final % before and after super admin's deduction (never below 0%).
       const worktimeBase = worktimeFinal(worktimeReal);
       const worktimeDeduction = isMonthly.value ? 0 : Number(m.worktimeDeduction) || 0;
-      const worktime = hasNumber(worktimeBase) ? Math.max(0, worktimeBase - worktimeDeduction) : null;
+      // A negative Final % (Real under 95%) stays negative, and a deduction lowers it further.
+      const worktime = hasNumber(worktimeBase) ? worktimeBase - worktimeDeduction : null;
       const profile = isMonthly.value ? profileByUser.value.get(String(m.userId)) || null : null;
       // Monthly a member scores on finance and their profiles (plus job offers
       // on a job team); weekly on finance, worktime and their own count.

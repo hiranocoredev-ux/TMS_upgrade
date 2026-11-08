@@ -72,6 +72,13 @@ describe('final worktime percent', () => {
     expect(finalWorktimePercent(95)).toBe(0);
     expect(finalWorktimePercent(97.5)).toBe(50);
     expect(finalWorktimePercent(100)).toBe(100);
-    expect(finalWorktimePercent(80)).toBe(0);
+    expect(finalWorktimePercent(120)).toBe(100);
+  });
+
+  it('goes negative under the baseline: Real − 95', () => {
+    expect(finalWorktimePercent(80)).toBe(-15);
+    expect(finalWorktimePercent(85.9)).toBeCloseTo(-9.1, 10);
+    expect(finalWorktimePercent(94.5)).toBeCloseTo(-0.5, 10);
+    expect(finalWorktimePercent(0)).toBe(-95);
   });
 });

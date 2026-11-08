@@ -1,14 +1,17 @@
 /**
- * Summarize scores the part of the Real percent above this baseline: Final % =
- * (Real − 95) × 20, kept within 0–100. Real 95% or less is 0%, 100% is 100%.
+ * Summarize scores the Real percent against this baseline:
+ *   Real 95% or more → Final % = (Real − 95) × 20, capped at 100% (97.5% → 50%, 100% → 100%)
+ *   Real under 95%   → Final % = Real − 95, a negative score (85.9% → −9.1%)
+ * Kept in step with server/src/constants/summarize.js.
  */
 export const WORKTIME_FINAL_BASELINE = 95;
 
 /** Final worktime % for a Real %; null when there is no Real % to convert. */
-export const worktimeFinalPercent = (real) =>
-  typeof real === 'number' && Number.isFinite(real)
-    ? Math.min(100, Math.max(0, ((real - WORKTIME_FINAL_BASELINE) / (100 - WORKTIME_FINAL_BASELINE)) * 100))
-    : null;
+export const worktimeFinalPercent = (real) => {
+  if (typeof real !== 'number' || !Number.isFinite(real)) return null;
+  if (real < WORKTIME_FINAL_BASELINE) return real - WORKTIME_FINAL_BASELINE;
+  return Math.min(100, ((real - WORKTIME_FINAL_BASELINE) / (100 - WORKTIME_FINAL_BASELINE)) * 100);
+};
 
 /**
  * Worktime achievement metrics — shared by Worktime Management and Summarize so

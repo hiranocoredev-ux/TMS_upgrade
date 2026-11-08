@@ -33,17 +33,19 @@ export const GROUP_METRICS_BY_TYPE = Object.freeze({
 export const DEFAULT_GROUP_COUNT_PLAN = 2;
 
 /**
- * Summarize scores the part of a member's Real worktime percent above this
- * baseline: Final % = (Real − 95) × 20, kept within 0–100. Kept in step with the
- * client's utils/worktimeMetrics.js (a unit test compares the two).
+ * Summarize scores a member's Real worktime percent against this baseline:
+ *   Real 95% or more → Final % = (Real − 95) × 20, capped at 100%
+ *   Real under 95%   → Final % = Real − 95, a negative score
+ * Kept in step with the client's utils/worktimeMetrics.js (a unit test compares the two).
  */
 export const WORKTIME_FINAL_BASELINE = 95;
 
 /** Final worktime % for a Real %; null when there is no Real % to convert. */
-export const finalWorktimePercent = (real) =>
-  typeof real === 'number' && Number.isFinite(real)
-    ? Math.min(100, Math.max(0, ((real - WORKTIME_FINAL_BASELINE) / (100 - WORKTIME_FINAL_BASELINE)) * 100))
-    : null;
+export const finalWorktimePercent = (real) => {
+  if (typeof real !== 'number' || !Number.isFinite(real)) return null;
+  if (real < WORKTIME_FINAL_BASELINE) return real - WORKTIME_FINAL_BASELINE;
+  return Math.min(100, ((real - WORKTIME_FINAL_BASELINE) / (100 - WORKTIME_FINAL_BASELINE)) * 100);
+};
 
 /** A member whose weekly Total falls under this works the coming weekend. */
 export const WEEKEND_RULE_THRESHOLD_PERCENT = 60;
