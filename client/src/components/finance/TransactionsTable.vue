@@ -9,6 +9,7 @@
           <th>Amount</th>
           <th>Status</th>
           <th>Source</th>
+          <th>Link</th>
           <th v-if="!readOnly">Actions</th>
         </tr>
       </thead>
@@ -49,6 +50,17 @@
             <StatusChip :status="transaction.status" />
           </td>
           <td>{{ transaction.source || transaction.category || '-' }}</td>
+          <td class="link-cell">
+            <a
+              v-if="transactionLink(transaction)"
+              :href="transactionLink(transaction)"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="tx-link"
+              :title="transactionLink(transaction)"
+            >Open ↗</a>
+            <span v-else class="tx-link--missing" title="No transaction URL yet — add one by editing">—</span>
+          </td>
           <td v-if="!readOnly" class="actions-cell">
             <button
               v-if="transaction.status === 'pending'"
@@ -76,7 +88,7 @@
           </td>
         </tr>
         <tr v-if="transactions.length === 0">
-          <td :colspan="readOnly ? 6 : 7" class="empty-state">No transactions found</td>
+          <td :colspan="readOnly ? 7 : 8" class="empty-state">No transactions found</td>
         </tr>
         <!-- Total Row -->
         <tr v-if="transactions.length > 0" class="total-row">
@@ -102,7 +114,7 @@
               </span>
             </div>
           </td>
-          <td colspan="3"></td>
+          <td :colspan="readOnly ? 3 : 4"></td>
         </tr>
       </tbody>
     </table>
@@ -114,6 +126,7 @@ import { computed } from 'vue';
 import { formatCurrency, formatDate, getTransactionTypeLabel } from '../../utils/financeHelpers';
 import { transactionIsTron } from '../../utils/tronHelpers';
 import StatusChip from '../../components/finance/StatusChip.vue';
+import { transactionLink } from '../../utils/transactionUrl';
 
 const props = defineProps({
   transactions: {
@@ -286,6 +299,25 @@ const getRowClass = (transaction) => {
 .expense-value {
   color: var(--color-error);
   font-weight: 500;
+}
+
+.link-cell {
+  white-space: nowrap;
+}
+
+.tx-link {
+  font-weight: 600;
+  color: var(--color-primary, #1f4e8c);
+  text-decoration: none;
+}
+
+.tx-link:hover,
+.tx-link:focus-visible {
+  text-decoration: underline;
+}
+
+.tx-link--missing {
+  color: var(--text-tertiary);
 }
 
 .actions-cell {

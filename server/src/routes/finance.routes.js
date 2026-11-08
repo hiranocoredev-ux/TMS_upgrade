@@ -50,6 +50,29 @@ const router = express.Router();
 
 router.use(requireAuth);
 
+/**
+ * The transaction URL (stored in `description`): a full http(s) link to the
+ * transaction, e.g. a block explorer or payment page. Required on create and
+ * on every edit. Only http(s) is accepted so the link is always safe to open.
+ */
+const MAX_TRANSACTION_URL_LENGTH = 2000;
+const TRANSACTION_URL_MESSAGE = "Transaction URL must be a full link starting with https:// or http://";
+export const isTransactionUrl = (value) => {
+  const text = String(value ?? "").trim();
+  if (!text || text.length > MAX_TRANSACTION_URL_LENGTH) return false;
+  try {
+    const url = new URL(text);
+    return url.protocol === "https:" || url.protocol === "http:";
+  } catch {
+    return false;
+  }
+};
+const transactionUrlField = z
+  .string({ required_error: "Transaction URL is required" })
+  .trim()
+  .min(1, "Transaction URL is required")
+  .refine(isTransactionUrl, TRANSACTION_URL_MESSAGE);
+
 const transactionSchema = z.object({
   userId: z.string().min(1, "UserId is required"),
   type: z.enum(["income", "outcome"]),
@@ -59,7 +82,7 @@ const transactionSchema = z.object({
   currency: z.string().default("USD"),
   category: z.string().optional(),
   source: z.string().optional(),
-  description: z.string().optional(),
+  description: transactionUrlField,
   throughTeamWallet: z.boolean().optional(),
   isTron: z.boolean().optional(),
   attachments: z.array(z.string()).optional(),
@@ -255,7 +278,9 @@ router.get("/transactions", async (req, res, next) => {
     }
 
     if (description) {
-      query.description = { $regex: description, $options: "i" };
+      // Plain-text search: URLs contain ?, +, ( and . which must not act as a pattern.
+      const escaped = String(description).slice(0, 2000).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      query.description = { $regex: escaped, $options: "i" };
     }
 
     if (from || to) {
@@ -595,6 +620,14 @@ router.put(
       }
 
       const validatedData = updateTransactionSchema.parse(req.body);
+
+      // Every edit must leave the transaction with a valid URL, so older
+      // transactions saved without one get it the next time they are edited.
+      if (validatedData.description === undefined && !isTransactionUrl(transaction.description)) {
+        return res
+          .status(400)
+          .json(createErrorResponse("VALIDATION_ERROR", "Transaction URL is required", 400));
+      }
 
       // Re-derive the recorded amount whenever any of its inputs change,
       // merging the patch over the stored document.

@@ -55,11 +55,11 @@
         </select>
       </div>
       <div class="filter-group">
-        <label>Description:</label>
+        <label>Transaction URL:</label>
         <input
           v-model="filters.description"
           type="text"
-          placeholder="Search description..."
+          placeholder="Search URL..."
           @input="debounceLoad"
           class="filter-input"
         />

@@ -125,14 +125,26 @@
           <input v-model="form.category" required placeholder="e.g., Office Supplies" />
         </div>
 
-        <!-- Description -->
+        <!-- Transaction URL (stored as the transaction's description) -->
         <div class="form-group">
-          <label>Description</label>
-          <textarea
+          <label for="transaction-url">Transaction URL *</label>
+          <input
+            id="transaction-url"
             v-model="form.description"
-            rows="3"
-            placeholder="Optional description..."
+            type="url"
+            required
+            inputmode="url"
+            autocomplete="off"
+            :maxlength="MAX_TRANSACTION_URL_LENGTH"
+            placeholder="https://..."
+            :aria-invalid="urlError ? 'true' : 'false'"
+            aria-describedby="transaction-url-hint"
+            @input="urlError = ''"
           />
+          <small v-if="urlError" id="transaction-url-hint" class="field-error">{{ urlError }}</small>
+          <small v-else id="transaction-url-hint" class="field-hint">
+            Link to the transaction, e.g. the block explorer or payment page.
+          </small>
         </div>
 
         <!-- Date -->
@@ -172,6 +184,11 @@ import { formatDateISO, formatCurrency } from '../../utils/financeHelpers';
 import { resolveIsTron, deriveAmount } from '../../utils/tronHelpers';
 import { getESTDateKey } from '../../utils/timezoneHelpers';
 import DateSelector from './DateSelector.vue';
+import {
+  isTransactionUrl,
+  MAX_TRANSACTION_URL_LENGTH,
+  TRANSACTION_URL_MESSAGE
+} from '../../utils/transactionUrl';
 
 const props = defineProps({
   transaction: {
@@ -190,6 +207,8 @@ const { addTransaction, editTransaction } = useFinance();
 
 const users = ref([]);
 const saving = ref(false);
+/** Shown under the Transaction URL field when it is missing or not a link. */
+const urlError = ref('');
 
 const isEdit = computed(() => !!props.transaction);
 
@@ -315,6 +334,18 @@ const save = async () => {
     return;
   }
 
+  // Required on every save, including edits of older transactions saved without one.
+  const transactionUrl = String(form.value.description || '').trim();
+  if (!transactionUrl) {
+    urlError.value = 'Transaction URL is required';
+    return;
+  }
+  if (!isTransactionUrl(transactionUrl)) {
+    urlError.value = TRANSACTION_URL_MESSAGE;
+    return;
+  }
+  urlError.value = '';
+
   saving.value = true;
 
   try {
@@ -327,7 +358,7 @@ const save = async () => {
       // Derived client-side for an immediate preview; the server re-derives it.
       amount: computedAmount.value,
       currency: form.value.currency,
-      description: form.value.description || '',
+      description: transactionUrl,
       throughTeamWallet: form.value.throughTeamWallet,
       isTron: effectiveIsTron.value,
       date: formatDateISO(new Date(form.value.date))
@@ -575,6 +606,25 @@ onMounted(() => {
   margin-left: 6px;
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+.field-hint,
+.field-error {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.field-hint {
+  color: var(--text-tertiary);
+}
+
+.field-error {
+  color: var(--color-error, #b42318);
+}
+
+.form-group input[aria-invalid='true'] {
+  border-color: var(--color-error, #b42318);
 }
 
 .form-actions {
