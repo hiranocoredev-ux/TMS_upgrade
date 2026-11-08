@@ -1174,9 +1174,10 @@ router.post(
 
 /* =====================================================================
    Two-step review: finance manager approves, then super admin approves
-   (which locks the transaction). See utils/transactionReview.js.
+   (which locks the transaction). A super admin's approval is final on its own,
+   so it may also come first. See utils/transactionReview.js.
    POST /finance/transactions/:id/review/fm-approve      finance manager
-   POST /finance/transactions/:id/review/admin-approve   super admin (after FM)
+   POST /finance/transactions/:id/review/admin-approve   super admin (with or without FM)
    POST /finance/transactions/:id/review/reject          either, { reason }
    POST /finance/transactions/:id/review/unlock          super admin, { reason }
    Each step only applies while the transaction is at the expected stage, so
@@ -1273,7 +1274,8 @@ reviewRoute({
   path: "admin-approve",
   allowed: isReviewerAdmin,
   deniedMessage: "Only a Super Admin can give the final approval",
-  fromStages: [REVIEW.FM_APPROVED],
+  // Final on its own: also allowed before the finance manager has approved.
+  fromStages: [REVIEW.AWAITING_FM, REVIEW.FM_APPROVED],
   buildUpdate: (user, _reason, now) => ({
     reviewStage: REVIEW.APPROVED,
     adminApprovedByUserId: user._id,

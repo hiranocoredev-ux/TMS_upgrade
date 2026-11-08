@@ -197,7 +197,9 @@ import {
   canEditTransaction,
   canChangeStatus,
   lockedMessage,
-  countsInTotals
+  countsInTotals,
+  reviewStageOf,
+  REVIEW
 } from '../../utils/transactionReview';
 
 const props = defineProps({
@@ -227,7 +229,11 @@ const hasReviewActions = (t) => Object.values(reviewActionsFor(t, currentUser.va
 
 const REVIEW_PROMPTS = {
   'fm-approve': { confirm: 'Approve this transaction as Finance Manager? It then goes to the Admin for final approval.' },
-  'admin-approve': { confirm: 'Give final approval? The transaction will be locked and can no longer be edited or deleted.' },
+  'admin-approve': {
+    confirm: 'Give final approval? The transaction will count in all reports and be locked — no more edits or deletion.',
+    confirmWithoutFm:
+      'The Finance Manager has not approved this yet. Approve it as Super Admin anyway? Your approval is final: it will count in all reports and be locked.'
+  },
   reject: { reason: 'Why is this transaction rejected? (The creator sees this and can fix and resubmit it.)' },
   unlock: { reason: 'Why unlock this approved transaction? It will need Finance Manager and Admin approval again.' }
 };
@@ -243,8 +249,9 @@ const runReview = async (transaction, action) => {
       window.alert('A reason is required.');
       return;
     }
-  } else if (!window.confirm(prompts.confirm)) {
-    return;
+  } else {
+    const skipsFm = action === 'admin-approve' && reviewStageOf(transaction) === REVIEW.AWAITING_FM;
+    if (!window.confirm(skipsFm ? prompts.confirmWithoutFm : prompts.confirm)) return;
   }
   busyId.value = transaction._id;
   try {

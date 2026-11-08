@@ -4,6 +4,8 @@
  *
  *   awaiting_fm --(finance manager approves)--> fm_approved
  *   fm_approved --(super admin approves)------> approved   (locked)
+ *   awaiting_fm --(super admin approves)------> approved   (locked; FM step skipped —
+ *                                               the super admin's approval is final)
  *   awaiting_fm / fm_approved --(either rejects, with reason)--> rejected
  *   rejected --(creator or a finance manager / super admin saves an edit)--> awaiting_fm
  *   approved --(super admin unlocks, with reason)--> awaiting_fm
@@ -59,7 +61,8 @@ export function reviewActionsFor(tx, user) {
   const stage = reviewStageOf(tx);
   return {
     fmApprove: stage === REVIEW.AWAITING_FM && isReviewerFinanceManager(user),
-    adminApprove: stage === REVIEW.FM_APPROVED && isReviewerAdmin(user),
+    // A super admin's approval is final, with or without the finance manager's.
+    adminApprove: UNDER_REVIEW.includes(stage) && isReviewerAdmin(user),
     reject: UNDER_REVIEW.includes(stage) && isReviewer(user),
     unlock: stage === REVIEW.APPROVED && isReviewerAdmin(user),
   };

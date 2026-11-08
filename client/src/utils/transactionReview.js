@@ -3,6 +3,7 @@
  *
  *   awaiting_fm -> (finance manager approves) fm_approved
  *               -> (super admin approves)     approved = locked
+ *   a super admin may also approve straight from awaiting_fm: final on its own
  *   either reviewer may reject (with a reason) -> rejected; editing resubmits
  *   a super admin may unlock an approved one (with a reason) -> awaiting_fm
  *
@@ -45,7 +46,8 @@ export const reviewActionsFor = (tx, user) => {
   const stage = reviewStageOf(tx);
   return {
     fmApprove: stage === REVIEW.AWAITING_FM && isFinanceManagerReviewer(user),
-    adminApprove: stage === REVIEW.FM_APPROVED && isAdminReviewer(user),
+    // A super admin's approval is final, with or without the finance manager's.
+    adminApprove: UNDER_REVIEW.includes(stage) && isAdminReviewer(user),
     reject: UNDER_REVIEW.includes(stage) && isReviewer(user),
     unlock: stage === REVIEW.APPROVED && isAdminReviewer(user),
   };
@@ -97,10 +99,20 @@ const baseReviewBadge = (tx) => {
     };
   }
   const admin = nameOf(tx.adminApprovedByUserId);
+  const when = tx.adminApprovedAt ? ` on ${dayOf(tx.adminApprovedAt)}` : '';
+  // Approved by the super admin without a finance manager approval first.
+  if (!tx.fmApprovedAt) {
+    return {
+      key: 'locked',
+      label: 'Approved by Admin · Locked',
+      title: `Approved by Super Admin${admin ? ` ${admin}` : ''}${when} without Finance Manager approval — locked`,
+    };
+  }
+  const fm = nameOf(tx.fmApprovedByUserId);
   return {
     key: 'locked',
     label: 'Approved · Locked',
-    title: `Fully approved${admin ? ` by ${admin}` : ''}${tx.adminApprovedAt ? ` on ${dayOf(tx.adminApprovedAt)}` : ''} — locked`,
+    title: `Approved by Finance Manager${fm ? ` ${fm}` : ''} and Super Admin${admin ? ` ${admin}` : ''}${when} — locked`,
   };
 };
 
