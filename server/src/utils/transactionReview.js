@@ -75,3 +75,29 @@ export const restartReviewFields = () => ({
 });
 
 export const MAX_REVIEW_REASON_LENGTH = 1000;
+
+/*
+ * Which transactions count in totals (summaries, overview, dashboard, reports,
+ * competition): everything created before APPROVAL_REQUIRED_FROM counts as it
+ * always has; anything created from then on counts only once fully approved
+ * (finance manager + super admin). The usual Accepted / Canceled rules still
+ * apply on top. Override the cut-off with FINANCE_APPROVAL_REQUIRED_FROM (ISO date).
+ */
+const DEFAULT_APPROVAL_REQUIRED_FROM = '2026-11-08T22:30:00.000Z';
+const parsedCutoff = new Date(process.env.FINANCE_APPROVAL_REQUIRED_FROM || DEFAULT_APPROVAL_REQUIRED_FROM);
+export const APPROVAL_REQUIRED_FROM = Number.isNaN(parsedCutoff.getTime())
+  ? new Date(DEFAULT_APPROVAL_REQUIRED_FROM)
+  : parsedCutoff;
+
+/** Mongo condition: the transaction counts in totals. */
+export const countableCondition = () => ({
+  $or: [{ createdAt: { $lt: APPROVAL_REQUIRED_FROM } }, { reviewStage: REVIEW.APPROVED }],
+});
+
+/** `match` narrowed to transactions that count in totals (safe even if `match` has its own $or). */
+export const withCountable = (match = {}) => ({ $and: [match, countableCondition()] });
+
+/** Same rule for a transaction already loaded. */
+export const countsInTotals = (tx) =>
+  reviewStageOf(tx) === REVIEW.APPROVED ||
+  (tx?.createdAt != null && new Date(tx.createdAt) < APPROVAL_REQUIRED_FROM);

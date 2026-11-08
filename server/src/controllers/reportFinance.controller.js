@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import User from '../models/User.js';
 import FinancePeriod from '../models/FinancePeriod.js';
 import FinanceTransaction from '../models/FinanceTransaction.js';
+import { withCountable } from '../utils/transactionReview.js';
 import MonthlyFinancialPlan from '../models/MonthlyFinancialPlan.js';
 import PeriodicFinancialPlan from '../models/PeriodicFinancialPlan.js';
 import { createErrorResponse, createSuccessResponse } from '../utils/errors.js';
@@ -182,11 +183,12 @@ export const getReportFinanceSection = async (req, res, next) => {
     const { range, plan } = await financeTargetFor(target._id, period, date);
 
     /* ---------- what actually came in over that range ---------- */
-    const rows = await FinanceTransaction.find({
+    // Only transactions that count in totals (created before approval was required, or fully approved).
+    const rows = await FinanceTransaction.find(withCountable({
       userId: target._id,
       date: { $gte: startOfDay(range.from), $lte: endOfDay(range.to) },
       status: { $in: ['accepted', 'pending'] },
-    })
+    }))
       .select('_id type status amount currency category source description date')
       .sort({ date: 1, createdAt: 1 })
       .lean();

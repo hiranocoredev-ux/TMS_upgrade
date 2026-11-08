@@ -3,6 +3,7 @@ import { monthRangeKeys } from '../utils/businessMonth.js';
 import Worklog from '../models/Worklog.js';
 import MonthlyFinancialPlan from '../models/MonthlyFinancialPlan.js';
 import FinanceTransaction from '../models/FinanceTransaction.js';
+import { withCountable } from '../utils/transactionReview.js';
 import WorktimeTarget from '../models/WorktimeTarget.js';
 import CompetitionAdjustment from '../models/CompetitionAdjustment.js';
 import CompetitionWorktimeDayRule from '../models/CompetitionWorktimeDayRule.js';
@@ -123,11 +124,12 @@ async function monthlyProfitByUser(userIds, monthKey) {
   const map = new Map(userIds.map((id) => [String(id), 0]));
   if (!bounds) return map;
 
-  const txs = await FinanceTransaction.find({
+  // Only transactions that count in totals (created before approval was required, or fully approved).
+  const txs = await FinanceTransaction.find(withCountable({
     userId: { $in: userIds },
     status: 'accepted',
     date: { $gte: bounds.startUtc, $lt: bounds.endUtc },
-  })
+  }))
     .select('userId type amount')
     .lean();
 

@@ -8,6 +8,7 @@ import SummarizeCallCount from '../models/SummarizeCallCount.js';
 import SummarizeGroupCount from '../models/SummarizeGroupCount.js';
 import SummarizeProfileTarget from '../models/SummarizeProfileTarget.js';
 import SummarizeWorktimeDeduction from '../models/SummarizeWorktimeDeduction.js';
+import { withCountable } from '../utils/transactionReview.js';
 import CitizenProfile from '../models/CitizenProfile.js';
 import User from '../models/User.js';
 import Group from '../models/Group.js';
@@ -124,11 +125,12 @@ export const getSummarize = async (req, res, next) => {
 
         const rows = await FinanceTransaction.aggregate([
           {
-            $match: {
+            // Only transactions that count in totals (created before approval was required, or fully approved).
+            $match: withCountable({
               userId: { $in: userIds },
               date: { $gte: range.start, $lte: range.end },
               status: { $in: ['accepted', 'pending'] },
-            },
+            }),
           },
           {
             $group: {

@@ -95,6 +95,7 @@ import { fetchUsers } from '../../services/users';
 import { formatCurrency, formatMonth, formatDate } from '../../utils/financeHelpers';
 import TransactionsTable from './TransactionsTable.vue';
 import apiClient from '../../services/axios';
+import { countsInTotals } from '../../utils/transactionReview';
 const formatAmount = (amount) => {
   return parseFloat(amount || 0).toFixed(2);
 };
@@ -170,7 +171,8 @@ const getPeriodActual = (plan) => {
       return txDate >= start && txDate <= end &&
         txUserId === planUserId &&
         t.status === 'accepted' &&
-        t.type === 'income';
+        t.type === 'income' &&
+        countsInTotals(t);
     })
     .reduce((sum, t) => sum + t.amount, 0);
 };
@@ -188,7 +190,8 @@ const getPeriodPending = (plan) => {
       return txDate >= start && txDate <= end &&
         txUserId === planUserId &&
         t.status === 'pending' &&
-        t.type === 'income';
+        t.type === 'income' &&
+        countsInTotals(t);
     })
     .reduce((sum, t) => sum + t.amount, 0);
 };

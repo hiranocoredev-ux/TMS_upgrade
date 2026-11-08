@@ -8,6 +8,7 @@ import Worklog from '../models/Worklog.js';
 import Daily from '../models/Daily.js';
 import FinanceTransaction from '../models/FinanceTransaction.js';
 import { normalizeRole, ROLES, NON_MEMBER_ROLES } from '../constants/roles.js';
+import { countableCondition } from '../utils/transactionReview.js';
 import {
   estDateKeyToUtcDate,
   getESTDateKey,
@@ -125,6 +126,8 @@ export const getDashboard = async (req, res) => {
     const incomeAgg = await FinanceTransaction.aggregate([
       {
         $match: {
+          // Counts in totals: created before approval was required, or fully approved.
+          ...countableCondition(),
           userId: { $in: userIds },
           type: 'income',
           status: 'accepted',

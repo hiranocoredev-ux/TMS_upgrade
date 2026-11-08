@@ -48,6 +48,8 @@ import {
   changeBlockedReason,
   restartReviewFields,
   MAX_REVIEW_REASON_LENGTH,
+  withCountable,
+  countsInTotals,
 } from "../utils/transactionReview.js";
 dotenv.config();
 
@@ -337,7 +339,8 @@ router.get("/transactions", async (req, res, next) => {
 
     res.json(
       createSuccessResponse({
-        transactions,
+        // Every transaction is listed; `countsInTotals` says whether it is in the totals yet.
+        transactions: transactions.map((t) => ({ ...t, countsInTotals: countsInTotals(t) })),
         pagination: {
           page: pageNum,
           limit: limitNum,
@@ -1388,7 +1391,7 @@ router.get("/summary", async (req, res, next) => {
       calculationQuery.status = { $ne: "canceled" };
     }
 
-    const allTransactions = await FinanceTransaction.find(calculationQuery)
+    const allTransactions = await FinanceTransaction.find(withCountable(calculationQuery))
       .select("type amount status date")
       .lean();
 
@@ -1516,7 +1519,7 @@ router.get("/summary", async (req, res, next) => {
 
     // Breakdown by category (outcome only, excluding canceled)
     const breakdownByCategory = await FinanceTransaction.aggregate([
-      { $match: { ...query, type: "outcome", status: { $ne: "canceled" } } },
+      { $match: withCountable({ ...query, type: "outcome", status: { $ne: "canceled" } }) },
       {
         $group: {
           _id: "$category",
@@ -1529,7 +1532,7 @@ router.get("/summary", async (req, res, next) => {
 
     // Breakdown by member (excluding canceled transactions)
     const breakdownByMember = await FinanceTransaction.aggregate([
-      { $match: { ...query, status: { $ne: "canceled" } } },
+      { $match: withCountable({ ...query, status: { $ne: "canceled" } }) },
       {
         $group: {
           _id: "$userId",
@@ -1612,7 +1615,7 @@ router.get("/summary", async (req, res, next) => {
 
     // Trend by month (excluding canceled transactions)
     const trendByMonth = await FinanceTransaction.aggregate([
-      { $match: { ...query, status: { $ne: "canceled" } } },
+      { $match: withCountable({ ...query, status: { $ne: "canceled" } }) },
       {
         $group: {
           _id: {
@@ -1908,7 +1911,7 @@ router.get(
 
       // Aggregate by user (PRIVACY: totals only, no descriptions or details)
       const perUserTotals = await FinanceTransaction.aggregate([
-        { $match: query },
+        { $match: withCountable(query) },
         {
           $group: {
             _id: "$userId",
@@ -3204,12 +3207,12 @@ router.get('/periodic-plans/matrix', async (req, res, next) => {
       const end = new Date(Math.max(...periods.map((p) => new Date(p.endDate).getTime())));
       end.setUTCHours(23, 59, 59, 999);
 
-      const rows = await FinanceTransaction.find({
+      const rows = await FinanceTransaction.find(withCountable({
         userId: { $in: memberIds },
         type: 'income',
         status: 'accepted',
         date: { $gte: start, $lte: end },
-      })
+      }))
         .select('userId date amount')
         .lean();
 
@@ -3343,12 +3346,12 @@ router.get('/periodic-plans', async (req, res, next) => {
     if (withPeriod.length > 0) {
       const minStart = new Date(Math.min(...withPeriod.map((p) => new Date(p.periodId.startDate).getTime())));
       const maxEnd = endOfDay(Math.max(...withPeriod.map((p) => new Date(p.periodId.endDate).getTime())));
-      const incomes = await FinanceTransaction.find({
+      const incomes = await FinanceTransaction.find(withCountable({
         type: 'income',
         status: { $in: ['accepted', 'pending'] },
         userId: { $in: [...new Set(withPeriod.map((p) => String(p.userId._id)))] },
         date: { $gte: minStart, $lte: maxEnd },
-      })
+      }))
         .select('userId date amount status')
         .lean();
 

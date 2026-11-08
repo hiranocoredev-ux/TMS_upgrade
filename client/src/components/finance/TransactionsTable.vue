@@ -55,6 +55,7 @@
             >
               <span v-if="reviewBadge(transaction).key === 'locked'" aria-hidden="true">🔒 </span>{{ reviewBadge(transaction).label }}
             </span>
+            <span v-if="!countsInTotals(transaction)" class="not-counted">Not in totals yet</span>
           </td>
           <td class="source-cell">
             <span>{{ transaction.source || transaction.category || '-' }}</span>
@@ -169,6 +170,10 @@
               <span :class="['net-total', netTotal >= 0 ? 'income-value' : 'expense-value']">
                 Net: {{ formatCurrency(netTotal, defaultCurrency) }}
               </span>
+              <span v-if="uncountedCount > 0" class="uncounted-note">
+                {{ uncountedCount }} {{ uncountedCount === 1 ? 'transaction is' : 'transactions are' }}
+                waiting for approval and not included.
+              </span>
             </div>
           </td>
           <td :colspan="readOnly ? 3 : 4"></td>
@@ -191,7 +196,8 @@ import {
   reviewActionsFor,
   canEditTransaction,
   canChangeStatus,
-  lockedMessage
+  lockedMessage,
+  countsInTotals
 } from '../../utils/transactionReview';
 
 const props = defineProps({
@@ -262,9 +268,14 @@ const isTeamWallet = (t) => t.throughTeamWallet !== false;
 // migration have no inputPrice, so there is nothing to show.
 const showPrice = (t) => !transactionIsTron(t) && t.inputPrice != null;
 
+// Totals skip transactions that are not counted yet (new ones awaiting full approval).
+const uncountedCount = computed(
+  () => props.transactions.filter(t => t.status !== 'canceled' && !countsInTotals(t)).length
+);
+
 const sumBy = (type, walletFilter) =>
   props.transactions
-    .filter(t => t.type === type && t.status !== 'canceled')
+    .filter(t => t.type === type && t.status !== 'canceled' && countsInTotals(t))
     .filter(t => walletFilter == null || isTeamWallet(t) === walletFilter)
     .reduce((sum, t) => sum + (t.amount || 0), 0);
 
@@ -494,6 +505,20 @@ const getRowClass = (transaction) => {
   color: var(--color-error, #b42318);
   background: rgba(180, 35, 24, 0.08);
   border-color: rgba(180, 35, 24, 0.25);
+}
+
+.not-counted {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.uncounted-note {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .lock-note {

@@ -51,11 +51,25 @@ export const reviewActionsFor = (tx, user) => {
   };
 };
 
+/**
+ * Does this transaction count in totals yet? The server decides (new ones count
+ * only once fully approved) and sends `countsInTotals`; rows without the flag
+ * (older API responses) count as before.
+ */
+export const countsInTotals = (tx) => tx?.countsInTotals !== false;
+
 const nameOf = (ref) => (ref && typeof ref === 'object' ? ref.name : '') || '';
 const dayOf = (d) => (d ? new Date(d).toLocaleDateString() : '');
 
 /** Badge for the Status column: { key, label, title }. */
 export const reviewBadge = (tx) => {
+  const badge = baseReviewBadge(tx);
+  return countsInTotals(tx)
+    ? badge
+    : { ...badge, title: `${badge.title}. Not counted in totals until fully approved.` };
+};
+
+const baseReviewBadge = (tx) => {
   const stage = reviewStageOf(tx);
   if (stage === REVIEW.AWAITING_FM) {
     return {

@@ -294,6 +294,7 @@ import { createErrorResponse, createSuccessResponse } from '../utils/errors.js';
 import { validateDateRange } from '../utils/financeHelpers.js';
 import { isCrossTeamFinanceOverviewViewer } from '../utils/financeTeamScope.js';
 import { NON_MEMBER_ROLES } from '../constants/roles.js';
+import { withCountable } from '../utils/transactionReview.js';
 
 /* ======================================================
    HELPERS
@@ -483,7 +484,8 @@ export const getFinanceMetrics = async (req, res, next) => {
       txQuery.userId = { $in: [] };
     }
 
-    const allTransactions = await FinanceTransaction.find(txQuery).lean();
+    // Only transactions that count in totals (created before approval was required, or fully approved).
+    const allTransactions = await FinanceTransaction.find(withCountable(txQuery)).lean();
 
     /* ======================================================
        GROUP_TRANSACTIONS BY USER
@@ -780,11 +782,11 @@ export const getQuarterProfit = async (req, res, next) => {
     const rows = scopedUserIds.length
       ? await FinanceTransaction.aggregate([
           {
-            $match: {
+            $match: withCountable({
               status: 'accepted',
               userId: { $in: scopedUserIds },
               date: { $gte: yearStart, $lt: yearEnd },
-            },
+            }),
           },
           {
             $group: {

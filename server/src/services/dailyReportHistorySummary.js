@@ -6,6 +6,7 @@ import WorktimeTarget from '../models/WorktimeTarget.js';
 import CompetitionWorktimeDayRule from '../models/CompetitionWorktimeDayRule.js';
 import CompetitionWorktimeUserDayRule from '../models/CompetitionWorktimeUserDayRule.js';
 import FinanceTransaction from '../models/FinanceTransaction.js';
+import { withCountable } from '../utils/transactionReview.js';
 import MonthlyFinancialPlan from '../models/MonthlyFinancialPlan.js';
 import { normalizeRole, ROLES } from '../constants/roles.js';
 
@@ -121,16 +122,17 @@ export async function buildDailyReportHistorySummary(viewerUser, targetUserId, d
           .select('real_time add_time total_time')
           .lean()
       : null,
-    FinanceTransaction.find({
+    // Only transactions that count in totals (created before approval was required, or fully approved).
+    FinanceTransaction.find(withCountable({
       userId: userObjectId,
       date: { $gte: monthStart, $lte: monthEnd }
-    })
+    }))
       .select('type amount status date description category source currency')
       .lean(),
-    FinanceTransaction.find({
+    FinanceTransaction.find(withCountable({
       userId: userObjectId,
       date: { $gte: dayStart, $lte: dayEnd }
-    })
+    }))
       .select('type amount status date description category source currency')
       .sort({ date: -1 })
       .lean(),

@@ -1,6 +1,7 @@
 import FinancePeriod from '../models/FinancePeriod.js';
 import PeriodicFinancialPlan from '../models/PeriodicFinancialPlan.js';
 import FinanceTransaction from '../models/FinanceTransaction.js';
+import { withCountable } from '../utils/transactionReview.js';
 import SummarizeCallCount from '../models/SummarizeCallCount.js';
 import SummarizeGroupCount from '../models/SummarizeGroupCount.js';
 import CompetitionWorktimeUserDayRule from '../models/CompetitionWorktimeUserDayRule.js';
@@ -72,11 +73,12 @@ export const weeklyMemberTotals = async (period) => {
     PeriodicFinancialPlan.find({ periodId, userId: { $in: userIds } }).select('userId periodicFinancialGoal').lean(),
     FinanceTransaction.aggregate([
       {
-        $match: {
+        // Same transactions as the Summarize page counts.
+        $match: withCountable({
           userId: { $in: userIds },
           date: { $gte: start, $lte: end },
           status: { $in: ['accepted', 'pending'] },
-        },
+        }),
       },
       { $group: { _id: { userId: '$userId', type: '$type', status: '$status' }, total: { $sum: '$amount' }, count: { $sum: 1 } } },
     ]),
