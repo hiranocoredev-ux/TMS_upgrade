@@ -38,6 +38,17 @@ import {
   FINANCE_META_GROUPS,
 } from "../utils/financeTeamScope.js";
 import { isSuperAdminRole, canManageAllFinance } from "../constants/roles.js";
+import {
+  REVIEW,
+  reviewStageOf,
+  isLocked,
+  isReviewerFinanceManager,
+  isReviewerAdmin,
+  isReviewer,
+  changeBlockedReason,
+  restartReviewFields,
+  MAX_REVIEW_REASON_LENGTH,
+} from "../utils/transactionReview.js";
 dotenv.config();
 
 const OUTCOME_APPROVAL_THRESHOLD = parseFloat(
@@ -311,6 +322,10 @@ router.get("/transactions", async (req, res, next) => {
       FinanceTransaction.find(query)
         .populate("userId", "email name")
         .populate("approvedByUserId", "email name")
+        .populate("createdByUserId", "name")
+        .populate("fmApprovedByUserId", "name")
+        .populate("adminApprovedByUserId", "name")
+        .populate("reviewRejectedByUserId", "name")
         .populate("linkedJobTicketId", "title")
         .populate("attachments")
         .sort({ date: -1 })
@@ -524,6 +539,10 @@ router.post(
         userId: targetUserId,
         approvalStatus,
         status: transactionStatus,
+        // Every new transaction starts the two-step review (finance manager, then admin).
+        ...restartReviewFields(),
+        createdByUserId: req.user._id,
+        createdByRole: normalizeRole(req.user.role, req.user.degree),
       };
 
       // Remove userId from transactionData as it's not a field in the schema
@@ -631,15 +650,25 @@ router.put(
 
       const validatedData = updateTransactionSchema.parse(req.body);
 
+      // The Accept / Cancel buttons send only `status`; anything else is an edit.
+      const changedKeys = Object.keys(validatedData).filter((k) => validatedData[k] !== undefined);
+      const statusOnly = changedKeys.length > 0 && changedKeys.every((k) => k === "status");
+
+      // Approved transactions are locked; a group boss's submission is frozen while under review.
+      const blocked = changeBlockedReason(transaction, req.user, statusOnly ? "status" : "edit");
+      if (blocked) {
+        return res.status(403).json(createErrorResponse("TRANSACTION_LOCKED", blocked, 403));
+      }
+
       // Every edit must leave the transaction with a description and a valid
       // URL, so older transactions saved without them get both the next time
-      // they are edited.
-      if (validatedData.description === undefined && !String(transaction.description || "").trim()) {
+      // they are edited. (Accept / Cancel alone does not need them.)
+      if (!statusOnly && validatedData.description === undefined && !String(transaction.description || "").trim()) {
         return res
           .status(400)
           .json(createErrorResponse("VALIDATION_ERROR", "Description is required", 400));
       }
-      if (validatedData.transactionUrl === undefined && !isTransactionUrl(transaction.transactionUrl)) {
+      if (!statusOnly && validatedData.transactionUrl === undefined && !isTransactionUrl(transaction.transactionUrl)) {
         return res
           .status(400)
           .json(createErrorResponse("VALIDATION_ERROR", "Transaction URL is required", 400));
@@ -791,6 +820,16 @@ router.put(
         transaction.userId = validatedData.userId;
       }
 
+      // Approvals cover the data as it was; changing it sends the transaction
+      // back to the start of the review. Editing a rejected one resubmits it.
+      const stageBefore = reviewStageOf(transaction);
+      if (!statusOnly && (stageBefore === REVIEW.FM_APPROVED || stageBefore === REVIEW.REJECTED)) {
+        Object.assign(transaction, restartReviewFields());
+        transaction.reviewRejectReason = "";
+        transaction.reviewRejectedByUserId = null;
+        transaction.reviewRejectedAt = null;
+      }
+
       await transaction.save();
       await transaction.populate("userId", "email name");
       await transaction.populate("approvedByUserId", "email name");
@@ -812,6 +851,7 @@ router.put(
             approvalStatus: transaction.approvalStatus,
             status: transaction.status,
           },
+          reviewStage: { before: stageBefore, after: reviewStageOf(transaction) },
         },
       );
 
@@ -885,6 +925,13 @@ router.delete(
               ),
             );
         }
+      }
+
+      // Locked (fully approved) and frozen (group boss submission under review)
+      // transactions cannot be deleted by anyone.
+      const deleteBlocked = changeBlockedReason(transaction, req.user, "delete");
+      if (deleteBlocked) {
+        return res.status(403).json(createErrorResponse("TRANSACTION_LOCKED", deleteBlocked, 403));
       }
 
       // Cannot delete approved transactions (unless boss/admin/finance manager)
@@ -972,6 +1019,14 @@ router.post(
           );
       }
 
+      if (isLocked(transaction)) {
+        return res.status(403).json(createErrorResponse(
+          "TRANSACTION_LOCKED",
+          "This transaction is approved and locked. A Super Admin must unlock it first.",
+          403,
+        ));
+      }
+
       if (transaction.approvalStatus !== "pending") {
         return res
           .status(400)
@@ -1056,6 +1111,14 @@ router.post(
           );
       }
 
+      if (isLocked(transaction)) {
+        return res.status(403).json(createErrorResponse(
+          "TRANSACTION_LOCKED",
+          "This transaction is approved and locked. A Super Admin must unlock it first.",
+          403,
+        ));
+      }
+
       if (transaction.approvalStatus !== "pending") {
         return res
           .status(400)
@@ -1105,6 +1168,151 @@ router.post(
     }
   },
 );
+
+/* =====================================================================
+   Two-step review: finance manager approves, then super admin approves
+   (which locks the transaction). See utils/transactionReview.js.
+   POST /finance/transactions/:id/review/fm-approve      finance manager
+   POST /finance/transactions/:id/review/admin-approve   super admin (after FM)
+   POST /finance/transactions/:id/review/reject          either, { reason }
+   POST /finance/transactions/:id/review/unlock          super admin, { reason }
+   Each step only applies while the transaction is at the expected stage, so
+   two reviewers clicking at once cannot both succeed.
+===================================================================== */
+const reviewReasonSchema = z.object({
+  reason: z
+    .string({ required_error: "A reason is required" })
+    .trim()
+    .min(1, "A reason is required")
+    .max(MAX_REVIEW_REASON_LENGTH, `Reason must be at most ${MAX_REVIEW_REASON_LENGTH} characters`),
+});
+
+/** Match transactions at one of `stages`; transactions from before the review count as approved. */
+const reviewStageFilter = (stages) =>
+  stages.includes(REVIEW.APPROVED)
+    ? { $or: [{ reviewStage: { $in: stages } }, { reviewStage: { $exists: false } }, { reviewStage: null }] }
+    : { reviewStage: { $in: stages } };
+
+const REVIEW_STAGE_LABELS = {
+  [REVIEW.AWAITING_FM]: "awaiting Finance Manager approval",
+  [REVIEW.FM_APPROVED]: "approved by the Finance Manager, awaiting Admin approval",
+  [REVIEW.APPROVED]: "approved and locked",
+  [REVIEW.REJECTED]: "rejected",
+};
+
+const reviewRoute = ({ path, allowed, deniedMessage, fromStages, needsReason, buildUpdate, auditAction, successMessage }) =>
+  router.post(`/transactions/:id/review/${path}`, async (req, res, next) => {
+    try {
+      const { id } = req.params;
+      if (!mongoose.isValidObjectId(id)) {
+        return res.status(400).json(createErrorResponse("INVALID_ID", "Invalid transaction id", 400));
+      }
+      if (!allowed(req.user)) {
+        return res.status(403).json(createErrorResponse("INSUFFICIENT_PERMISSIONS", deniedMessage, 403));
+      }
+      const reason = needsReason ? reviewReasonSchema.parse(req.body || {}).reason : "";
+
+      const existing = await FinanceTransaction.findById(id).select("reviewStage").lean();
+      if (!existing) {
+        return res.status(404).json(createErrorResponse("NOT_FOUND", "Transaction not found", 404));
+      }
+
+      const updated = await FinanceTransaction.findOneAndUpdate(
+        { _id: id, ...reviewStageFilter(fromStages) },
+        { $set: buildUpdate(req.user, reason, new Date()) },
+        { new: true },
+      );
+      if (!updated) {
+        return res.status(409).json(createErrorResponse(
+          "REVIEW_STAGE_CHANGED",
+          `This transaction is ${REVIEW_STAGE_LABELS[reviewStageOf(existing)]}. Refresh and try again.`,
+          409,
+        ));
+      }
+
+      await auditLog(req, auditAction, "FINANCE_TRANSACTION", id, {
+        ...getRequestMeta(req),
+        reviewStage: { before: reviewStageOf(existing), after: updated.reviewStage },
+        ...(reason ? { reason } : {}),
+      });
+
+      await updated.populate([
+        { path: "userId", select: "email name" },
+        { path: "createdByUserId", select: "name" },
+        { path: "fmApprovedByUserId", select: "name" },
+        { path: "adminApprovedByUserId", select: "name" },
+        { path: "reviewRejectedByUserId", select: "name" },
+      ]);
+      res.json(createSuccessResponse({ transaction: updated }, successMessage));
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json(createErrorResponse("VALIDATION_ERROR", error.errors[0]?.message || "Validation error", 400));
+      }
+      next(error);
+    }
+  });
+
+reviewRoute({
+  path: "fm-approve",
+  allowed: isReviewerFinanceManager,
+  deniedMessage: "Only a Finance Manager can give the first approval",
+  fromStages: [REVIEW.AWAITING_FM],
+  buildUpdate: (user, _reason, now) => ({
+    reviewStage: REVIEW.FM_APPROVED,
+    fmApprovedByUserId: user._id,
+    fmApprovedAt: now,
+  }),
+  auditAction: "FINANCE_TRANSACTION_FM_APPROVE",
+  successMessage: "Approved by Finance Manager",
+});
+
+reviewRoute({
+  path: "admin-approve",
+  allowed: isReviewerAdmin,
+  deniedMessage: "Only a Super Admin can give the final approval",
+  fromStages: [REVIEW.FM_APPROVED],
+  buildUpdate: (user, _reason, now) => ({
+    reviewStage: REVIEW.APPROVED,
+    adminApprovedByUserId: user._id,
+    adminApprovedAt: now,
+  }),
+  auditAction: "FINANCE_TRANSACTION_ADMIN_APPROVE",
+  successMessage: "Approved and locked",
+});
+
+reviewRoute({
+  path: "reject",
+  allowed: isReviewer,
+  deniedMessage: "Only a Finance Manager or Super Admin can reject",
+  fromStages: [REVIEW.AWAITING_FM, REVIEW.FM_APPROVED],
+  needsReason: true,
+  buildUpdate: (user, reason, now) => ({
+    reviewStage: REVIEW.REJECTED,
+    reviewRejectedByUserId: user._id,
+    reviewRejectedAt: now,
+    reviewRejectReason: reason,
+    fmApprovedByUserId: null,
+    fmApprovedAt: null,
+  }),
+  auditAction: "FINANCE_TRANSACTION_REVIEW_REJECT",
+  successMessage: "Rejected — it can now be edited and resubmitted",
+});
+
+reviewRoute({
+  path: "unlock",
+  allowed: isReviewerAdmin,
+  deniedMessage: "Only a Super Admin can unlock a transaction",
+  fromStages: [REVIEW.APPROVED],
+  needsReason: true,
+  buildUpdate: (user, reason, now) => ({
+    ...restartReviewFields(),
+    unlockedByUserId: user._id,
+    unlockedAt: now,
+    unlockReason: reason,
+  }),
+  auditAction: "FINANCE_TRANSACTION_UNLOCK",
+  successMessage: "Unlocked — it now needs approval again",
+});
 
 // GET /finance/summary - Financial summary with breakdowns
 // Supports: ?month=YYYY-MM OR ?from=...&to=... (for backward compatibility)

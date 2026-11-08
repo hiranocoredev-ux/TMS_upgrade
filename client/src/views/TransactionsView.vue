@@ -156,6 +156,7 @@
             @accept="handleAccept"
             @cancel="handleCancel"
             @view="handleView"
+            @changed="loadData"
           />
           
           <!-- Pagination -->

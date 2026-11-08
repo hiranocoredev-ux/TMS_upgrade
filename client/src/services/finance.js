@@ -155,6 +155,23 @@ export const rejectTransaction = async (id, reason = '') => {
   return response.data;
 };
 
+/**
+ * Two-step review action on a transaction.
+ * @param {string} id - Transaction ID
+ * @param {'fm-approve'|'admin-approve'|'reject'|'unlock'} action
+ *   fm-approve: finance manager · admin-approve: super admin (locks) ·
+ *   reject: either (reason required) · unlock: super admin (reason required)
+ * @param {string} [reason]
+ * @returns {Promise<ApiResponse>} { ok: true, data: { transaction } }
+ */
+export const reviewTransaction = async (id, action, reason) => {
+  const response = await apiClient.post(
+    `/finance/transactions/${id}/review/${action}`,
+    reason ? { reason } : {}
+  );
+  return response.data;
+};
+
 // ============================================
 // Monthly Financial Plan Endpoints
 // ============================================

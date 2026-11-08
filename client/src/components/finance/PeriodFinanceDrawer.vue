@@ -81,7 +81,7 @@
         <div class="transactions-section">
           <h3>Transactions in Period</h3>
           <TransactionsTable :transactions="periodTransactions" :read-only="!readOnly" @view="handleViewTransaction"
-            @accept="handleAccept" @cancel="handleCancel" @edit="handleEdit" />
+            @accept="handleAccept" @cancel="handleCancel" @edit="handleEdit" @changed="reloadTransactions" />
         </div>
       </div>
     </div>
@@ -200,30 +200,23 @@ const close = () => {
 const handleViewTransaction = (transaction) => {
   console.log('View transaction:', transaction);
 };
+// Through the API client so the request carries the login token (and shows errors).
 const handleAccept = async (transaction) => {
   try {
-    await fetch(`/api/finance/transactions/${transaction._id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'accepted' })
-    });
-    await reloadTransactions();
+    await apiClient.put(`/finance/transactions/${transaction._id}`, { status: 'accepted' });
   } catch (err) {
     console.error('Accept failed', err);
   }
+  await reloadTransactions();
 };
 
 const handleCancel = async (transaction) => {
   try {
-    await fetch(`/api/finance/transactions/${transaction._id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: 'canceled' })
-    });
-    await reloadTransactions();
+    await apiClient.put(`/finance/transactions/${transaction._id}`, { status: 'canceled' });
   } catch (err) {
     console.error('Cancel failed', err);
   }
+  await reloadTransactions();
 };
 
 const handleEdit = (transaction) => {

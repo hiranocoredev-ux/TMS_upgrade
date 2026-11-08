@@ -112,7 +112,34 @@ const financeTransactionSchema = new mongoose.Schema({
     default: 'accepted',
     required: true,
     index: true
-  }
+  },
+
+  /*
+   * Two-step review (see utils/transactionReview.js):
+   *   awaiting_fm -> (finance manager approves) fm_approved
+   *               -> (super admin approves)     approved = locked
+   *   either reviewer may reject -> rejected (editable again; saving resubmits)
+   * No default on purpose: transactions created before the review existed have
+   * no stage and are treated as approved & locked.
+   */
+  reviewStage: {
+    type: String,
+    enum: ['awaiting_fm', 'fm_approved', 'approved', 'rejected'],
+    index: true
+  },
+  createdByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  /** Canonical role of the creator; a group boss's submission is frozen while under review. */
+  createdByRole: { type: String, default: '' },
+  fmApprovedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  fmApprovedAt: { type: Date },
+  adminApprovedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  adminApprovedAt: { type: Date },
+  reviewRejectedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  reviewRejectedAt: { type: Date },
+  reviewRejectReason: { type: String, default: '' },
+  unlockedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+  unlockedAt: { type: Date },
+  unlockReason: { type: String, default: '' }
 }, {
   timestamps: true
 });

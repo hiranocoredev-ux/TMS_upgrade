@@ -36,6 +36,7 @@
               :transactions="recentTransactions"
               :read-only="!isBoss"
               @view="handleViewTransaction"
+              @changed="loadUserData"
             />
           </div>
         </div>

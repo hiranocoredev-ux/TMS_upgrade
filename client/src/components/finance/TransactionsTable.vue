@@ -46,8 +46,15 @@
               ({{ formatCurrency(transaction.inputPrice, transaction.currency) }} × 0.98)
             </span>
           </td>
-          <td>
+          <td class="status-cell">
             <StatusChip :status="transaction.status" />
+            <span
+              class="review-badge"
+              :class="`is-${reviewBadge(transaction).key}`"
+              :title="reviewBadge(transaction).title"
+            >
+              <span v-if="reviewBadge(transaction).key === 'locked'" aria-hidden="true">🔒 </span>{{ reviewBadge(transaction).label }}
+            </span>
           </td>
           <td class="source-cell">
             <span>{{ transaction.source || transaction.category || '-' }}</span>
@@ -68,30 +75,73 @@
             >Open ↗</a>
             <span v-else class="tx-link--missing" title="No transaction URL yet — add one by editing">—</span>
           </td>
-          <td v-if="!readOnly" class="actions-cell">
-            <button
-              v-if="transaction.status === 'pending'"
-              @click="$emit('accept', transaction)"
-              class="btn-action btn-accept"
-              title="Accept"
-            >
-              ✓
-            </button>
-            <button
-              v-if="transaction.status !== 'canceled'"
-              @click="$emit('cancel', transaction)"
-              class="btn-action btn-cancel"
-              title="Cancel"
-            >
-              ✕
-            </button>
-            <button
-              @click="$emit('edit', transaction)"
-              class="btn-action btn-edit"
-              title="Edit"
-            >
-              ✎
-            </button>
+          <td v-if="!readOnly" class="actions-col">
+            <div class="actions-cell">
+              <button
+                v-if="transaction.status === 'pending' && canChangeStatus(transaction, currentUser)"
+                @click="$emit('accept', transaction)"
+                class="btn-action btn-accept"
+                title="Accept"
+                aria-label="Accept"
+              >
+                ✓
+              </button>
+              <button
+                v-if="transaction.status !== 'canceled' && canChangeStatus(transaction, currentUser)"
+                @click="$emit('cancel', transaction)"
+                class="btn-action btn-cancel"
+                title="Cancel"
+                aria-label="Cancel"
+              >
+                ✕
+              </button>
+              <button
+                v-if="canEditTransaction(transaction, currentUser)"
+                @click="$emit('edit', transaction)"
+                class="btn-action btn-edit"
+                title="Edit"
+                aria-label="Edit"
+              >
+                ✎
+              </button>
+              <span
+                v-else
+                class="lock-note"
+                role="img"
+                :title="lockedMessage(transaction)"
+                :aria-label="lockedMessage(transaction)"
+              >🔒</span>
+            </div>
+            <div v-if="hasReviewActions(transaction)" class="review-actions">
+              <button
+                v-if="reviewActionsFor(transaction, currentUser).fmApprove"
+                type="button"
+                class="btn-review btn-review--approve"
+                :disabled="busyId === transaction._id"
+                @click="runReview(transaction, 'fm-approve')"
+              >Approve</button>
+              <button
+                v-if="reviewActionsFor(transaction, currentUser).adminApprove"
+                type="button"
+                class="btn-review btn-review--approve"
+                :disabled="busyId === transaction._id"
+                @click="runReview(transaction, 'admin-approve')"
+              >Final approve</button>
+              <button
+                v-if="reviewActionsFor(transaction, currentUser).reject"
+                type="button"
+                class="btn-review btn-review--reject"
+                :disabled="busyId === transaction._id"
+                @click="runReview(transaction, 'reject')"
+              >Reject</button>
+              <button
+                v-if="reviewActionsFor(transaction, currentUser).unlock"
+                type="button"
+                class="btn-review"
+                :disabled="busyId === transaction._id"
+                @click="runReview(transaction, 'unlock')"
+              >Unlock</button>
+            </div>
           </td>
         </tr>
         <tr v-if="transactions.length === 0">
@@ -129,11 +179,20 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { formatCurrency, formatDate, getTransactionTypeLabel } from '../../utils/financeHelpers';
 import { transactionIsTron } from '../../utils/tronHelpers';
 import StatusChip from '../../components/finance/StatusChip.vue';
 import { transactionLink } from '../../utils/transactionUrl';
+import { useAuthStore } from '../../composables/useAuth';
+import { reviewTransaction } from '../../services/finance';
+import {
+  reviewBadge,
+  reviewActionsFor,
+  canEditTransaction,
+  canChangeStatus,
+  lockedMessage
+} from '../../utils/transactionReview';
 
 const props = defineProps({
   transactions: {
@@ -150,7 +209,49 @@ const props = defineProps({
   }
 });
 
-defineEmits(['edit', 'accept', 'cancel', 'view']);
+const emit = defineEmits(['edit', 'accept', 'cancel', 'view', 'changed']);
+
+/* ---------- Two-step review (finance manager, then admin) ---------- */
+const authStore = useAuthStore();
+const currentUser = computed(() => authStore.user);
+/** Transaction whose review action is in flight (its buttons wait). */
+const busyId = ref('');
+
+const hasReviewActions = (t) => Object.values(reviewActionsFor(t, currentUser.value)).some(Boolean);
+
+const REVIEW_PROMPTS = {
+  'fm-approve': { confirm: 'Approve this transaction as Finance Manager? It then goes to the Admin for final approval.' },
+  'admin-approve': { confirm: 'Give final approval? The transaction will be locked and can no longer be edited or deleted.' },
+  reject: { reason: 'Why is this transaction rejected? (The creator sees this and can fix and resubmit it.)' },
+  unlock: { reason: 'Why unlock this approved transaction? It will need Finance Manager and Admin approval again.' }
+};
+
+const runReview = async (transaction, action) => {
+  const prompts = REVIEW_PROMPTS[action];
+  let reason;
+  if (prompts.reason) {
+    reason = window.prompt(prompts.reason, '');
+    if (reason === null) return;
+    reason = reason.trim();
+    if (!reason) {
+      window.alert('A reason is required.');
+      return;
+    }
+  } else if (!window.confirm(prompts.confirm)) {
+    return;
+  }
+  busyId.value = transaction._id;
+  try {
+    // The API client shows the success or error message.
+    await reviewTransaction(transaction._id, action, reason);
+    emit('changed', transaction);
+  } catch {
+    // A 409 means someone else moved it on first; reload to show the current state.
+    emit('changed', transaction);
+  } finally {
+    busyId.value = '';
+  }
+};
 
 // A transaction counts as "team wallet" unless explicitly flagged false
 // (legacy rows without the field are treated as team wallet).
@@ -348,6 +449,103 @@ const getRowClass = (transaction) => {
 .actions-cell {
   display: flex;
   gap: 4px;
+}
+
+/* ---------- Two-step review ---------- */
+.status-cell {
+  white-space: nowrap;
+}
+
+.review-badge {
+  display: block;
+  width: fit-content;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.6;
+  border: 1px solid transparent;
+}
+
+/* Waiting for the finance manager: neutral. */
+.review-badge.is-awaiting {
+  color: var(--text-secondary);
+  background: var(--bg-tertiary, rgba(100, 116, 139, 0.1));
+  border-color: var(--border-light);
+}
+
+/* Finance manager approved, waiting for admin: blue. */
+.review-badge.is-fm {
+  color: var(--color-primary, #1f4e8c);
+  background: rgba(31, 78, 140, 0.1);
+  border-color: rgba(31, 78, 140, 0.25);
+}
+
+/* Fully approved and locked: green. */
+.review-badge.is-locked {
+  color: var(--color-success, #1f7a4d);
+  background: rgba(31, 122, 77, 0.1);
+  border-color: rgba(31, 122, 77, 0.25);
+}
+
+/* Rejected, back with the creator: red. */
+.review-badge.is-rejected {
+  color: var(--color-error, #b42318);
+  background: rgba(180, 35, 24, 0.08);
+  border-color: rgba(180, 35, 24, 0.25);
+}
+
+.lock-note {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 6px;
+  font-size: 14px;
+  cursor: help;
+}
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.btn-review {
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid var(--border-medium, #cbd5e1);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.btn-review:hover:not(:disabled) {
+  color: var(--text-primary);
+  border-color: var(--text-tertiary);
+}
+
+.btn-review--approve {
+  color: var(--color-success, #1f7a4d);
+  border-color: rgba(31, 122, 77, 0.4);
+}
+
+.btn-review--reject {
+  color: var(--color-error, #b42318);
+  border-color: rgba(180, 35, 24, 0.4);
+}
+
+.btn-review:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.btn-review:focus-visible,
+.btn-action:focus-visible {
+  outline: 2px solid var(--color-primary, #1f4e8c);
+  outline-offset: 1px;
 }
 
 .btn-action {

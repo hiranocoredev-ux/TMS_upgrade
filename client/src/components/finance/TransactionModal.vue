@@ -7,6 +7,18 @@
       </div>
 
       <form @submit.prevent="save" class="modal-body">
+        <!-- Two-step review state -->
+        <p v-if="isEdit && blockedMessage" class="review-banner review-banner--locked" role="status">
+          🔒 {{ blockedMessage }}
+        </p>
+        <p v-else-if="isEdit && rejectedNote" class="review-banner review-banner--rejected" role="status">
+          <strong>Rejected:</strong> {{ rejectedNote }}<br />
+          Fix it and save to resubmit it for approval.
+        </p>
+        <p v-else-if="isEdit && wasFmApproved" class="review-banner" role="status">
+          Approved by the Finance Manager. Saving changes sends it back for Finance Manager approval.
+        </p>
+
         <!-- User (only show when editing or if no selectedUserId) -->
         <div v-if="isEdit || !selectedUserId" class="form-group">
           <label>User *</label>
@@ -187,7 +199,7 @@
 
         <div class="form-actions">
           <button type="button" @click="close" class="btn-cancel">Cancel</button>
-          <button type="submit" class="btn-primary" :disabled="saving">
+          <button type="submit" class="btn-primary" :disabled="saving || !!blockedMessage">
             {{ saving ? 'Saving...' : 'Save' }}
           </button>
         </div>
@@ -210,6 +222,7 @@ import {
   MAX_TRANSACTION_URL_LENGTH,
   TRANSACTION_URL_MESSAGE
 } from '../../utils/transactionUrl';
+import { REVIEW, reviewStageOf, lockedMessage } from '../../utils/transactionReview';
 
 const props = defineProps({
   transaction: {
@@ -233,6 +246,16 @@ const descriptionError = ref('');
 const urlError = ref('');
 
 const isEdit = computed(() => !!props.transaction);
+
+/* Two-step review state of the transaction being edited. */
+const blockedMessage = computed(() => (props.transaction ? lockedMessage(props.transaction) : ''));
+const rejectedNote = computed(() => {
+  const t = props.transaction;
+  if (!t || reviewStageOf(t) !== REVIEW.REJECTED) return '';
+  const by = t.reviewRejectedByUserId && typeof t.reviewRejectedByUserId === 'object' ? t.reviewRejectedByUserId.name : '';
+  return `${t.reviewRejectReason || 'No reason given'}${by ? ` (${by})` : ''}`;
+});
+const wasFmApproved = computed(() => !!props.transaction && reviewStageOf(props.transaction) === REVIEW.FM_APPROVED);
 
 const form = ref({
   userId: '',
@@ -631,6 +654,29 @@ onMounted(() => {
   margin-left: 6px;
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+.review-banner {
+  margin: 0 0 16px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  background: rgba(31, 78, 140, 0.08);
+  border: 1px solid rgba(31, 78, 140, 0.2);
+}
+
+.review-banner--locked {
+  color: var(--color-success, #1f7a4d);
+  background: rgba(31, 122, 77, 0.08);
+  border-color: rgba(31, 122, 77, 0.25);
+}
+
+.review-banner--rejected {
+  color: var(--color-error, #b42318);
+  background: rgba(180, 35, 24, 0.06);
+  border-color: rgba(180, 35, 24, 0.25);
 }
 
 .field-hint,
