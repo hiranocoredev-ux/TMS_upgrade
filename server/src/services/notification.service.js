@@ -12,7 +12,7 @@ import NotificationSettings from '../models/NotificationSettings.js';
 import NotificationDispatchLog from '../models/NotificationDispatchLog.js';
 import CompetitionWorktimeDayRule from '../models/CompetitionWorktimeDayRule.js';
 import CompetitionWorktimeUserDayRule from '../models/CompetitionWorktimeUserDayRule.js';
-import { normalizeRole, ROLES } from '../constants/roles.js';
+import { normalizeRole, ROLES, isNonMemberRole } from '../constants/roles.js';
 import { EST_TIMEZONE, getESTDateKey, normalizeReportDateByPeriodEST } from '../utils/estTime.js';
 
 const execFileAsync = promisify(execFile);
@@ -106,9 +106,10 @@ async function sendIpMessageToUser({ settings, user, message, type, dedupeKey, m
   }
 }
 
+/** Active team members: report / worktime reminders go to these (no super admin, no finance manager). */
 async function activeUsersNoSuperAdmin() {
   const users = await User.find({ status: 'active' }).lean();
-  return users.filter((u) => normalizeRole(u.role, u.degree) !== ROLES.SUPER_ADMIN);
+  return users.filter((u) => !isNonMemberRole(u.role, u.degree));
 }
 
 async function activeUsersAll() {

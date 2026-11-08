@@ -293,6 +293,7 @@ import mongoose from 'mongoose';
 import { createErrorResponse, createSuccessResponse } from '../utils/errors.js';
 import { validateDateRange } from '../utils/financeHelpers.js';
 import { isCrossTeamFinanceOverviewViewer } from '../utils/financeTeamScope.js';
+import { NON_MEMBER_ROLES } from '../constants/roles.js';
 
 /* ======================================================
    HELPERS
@@ -754,9 +755,9 @@ export const getQuarterProfit = async (req, res, next) => {
     const groupId = req.query.groupId;
 
     // The jackpot leaderboard is company-wide: every viewer sees ALL users
-    // (across every group) except SUPER_ADMIN — no per-viewer team scoping.
-    // An explicit groupId filter is still honored if provided.
-    const userQuery = { role: { $ne: 'SUPER_ADMIN' } };
+    // (across every group) except SUPER_ADMIN / FINANCE_MANAGER — no per-viewer
+    // team scoping. An explicit groupId filter is still honored if provided.
+    const userQuery = { role: { $nin: NON_MEMBER_ROLES } };
     if (groupId && groupId !== 'all') {
       userQuery.group = groupId;
     }

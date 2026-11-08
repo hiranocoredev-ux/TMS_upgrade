@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue';
 import { useToast } from 'vue-toastification';
 import { useAuthStore } from '../composables/useAuth';
-import { normalizeRole, ROLES } from '../constants/roles';
+import { normalizeRole, ROLES, canManageAllFinance } from '../constants/roles';
 import * as financeApi from '../services/finance';
 
 const toast = useToast();
@@ -12,15 +12,13 @@ const role = computed(() => normalizeRole(authStore.user?.role, authStore.user?.
 const isSuperAdmin = computed(() => role.value === ROLES.SUPER_ADMIN);
 const isGroupBoss = computed(() => role.value === ROLES.GROUP_BOSS);
 const isGroupMember = computed(() => role.value === ROLES.GROUP_MEMBER);
+/** Super admin and finance manager handle boss → platform requests, as do flagged approvers. */
+const handlesAllFinance = computed(() => canManageAllFinance(authStore.user?.role, authStore.user?.degree));
 const canUsePlatformInbox = computed(
-  () => isSuperAdmin.value || authStore.user?.paymentRequestApprover === true,
+  () => handlesAllFinance.value || authStore.user?.paymentRequestApprover === true,
 );
 
-const activeScope = ref(
-  normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SUPER_ADMIN
-    ? 'platform_inbox'
-    : 'my',
-);
+const activeScope = ref(handlesAllFinance.value ? 'platform_inbox' : 'my');
 const requests = ref([]);
 const loading = ref(false);
 const error = ref('');
@@ -49,7 +47,8 @@ const flowHint = computed(() => {
 
 const tabs = computed(() => {
   const t = [];
-  if (!isSuperAdmin.value) {
+  // Super admin and finance manager handle requests; they don't submit any.
+  if (!handlesAllFinance.value) {
     t.push({ key: 'my', label: 'My requests', scope: 'my', desc: 'Your submissions' });
   }
   if (isGroupBoss.value) {

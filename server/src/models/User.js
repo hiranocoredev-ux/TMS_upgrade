@@ -38,6 +38,7 @@ const userSchema = new mongoose.Schema({
       'SUPER_ADMIN',
       'GROUP_BOSS',
       'GROUP_MEMBER',
+      'FINANCE_MANAGER',
       'ADMIN',
       'BOSS',
       'MEMBER',

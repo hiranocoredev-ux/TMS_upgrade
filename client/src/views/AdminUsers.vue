@@ -137,8 +137,12 @@
                 <select v-model="form.role" required>
                   <option value="GROUP_MEMBER">Member</option>
                   <option value="GROUP_BOSS">Group Boss</option>
+                  <option v-if="isSuperAdmin" value="FINANCE_MANAGER">Finance Manager</option>
                   <option v-if="isSuperAdmin" value="SUPER_ADMIN">Super Admin</option>
                 </select>
+                <small v-if="form.role === 'FINANCE_MANAGER'" class="form-hint">
+                  Full control of Finance for every team, plus read-only Summarize. No group.
+                </small>
               </div>
               <div v-if="!isFormSuperAdmin" class="form-group">
                 <label>Group *</label>
@@ -382,7 +386,7 @@ import { ref, onMounted, computed, watch } from 'vue';
 import { useAuthStore } from '../composables/useAuth';
 import * as adminService from '../services/admin';
 import { formatGroupLabel } from '../constants/groups.js';
-import { ROLES, normalizeRole } from '../constants/roles.js';
+import { ROLES, normalizeRole, GROUPLESS_ROLES } from '../constants/roles.js';
 import {
   WORKING_ROLE_VALUES,
   WORKING_ROLE_LABELS,
@@ -402,7 +406,10 @@ const loading = ref(false);
 const error = ref(null);
 const users = ref([]);
 
-/** Super admins first, then groups in directory order (sortOrder): boss, then members; unknown groups after. */
+/**
+ * Super admins first, then finance managers, then groups in directory order
+ * (sortOrder): boss, then members; unknown groups after.
+ */
 const sortedUsers = computed(() => {
   const list = users.value;
   if (!list.length) return [];
@@ -412,8 +419,10 @@ const sortedUsers = computed(() => {
     String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base', numeric: true });
 
   const superAdmins = list.filter((u) => canon(u) === ROLES.SUPER_ADMIN);
-  const others = list.filter((u) => canon(u) !== ROLES.SUPER_ADMIN);
+  const financeManagers = list.filter((u) => canon(u) === ROLES.FINANCE_MANAGER);
+  const others = list.filter((u) => !GROUPLESS_ROLES.includes(canon(u)));
   superAdmins.sort(nameCmp);
+  financeManagers.sort(nameCmp);
 
   const groupsByOrder = [...groups.value].sort((a, b) => {
     const so = Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0);
@@ -460,7 +469,7 @@ const sortedUsers = computed(() => {
   });
   orderedKeys.push(...leftovers);
 
-  const out = [...superAdmins];
+  const out = [...superAdmins, ...financeManagers];
   for (const key of orderedKeys) {
     out.push(...(byGroup.get(key) || []));
   }
@@ -492,13 +501,15 @@ const deleteErrorMessage = ref('');
 const isSuperAdmin = computed(
   () => normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SUPER_ADMIN
 );
-const isFormSuperAdmin = computed(() => form.value.role === ROLES.SUPER_ADMIN);
+/** Super admin or finance manager in the form: no group and no working role. */
+const isFormSuperAdmin = computed(() => GROUPLESS_ROLES.includes(form.value.role));
 
 const canDeleteUser = (user) => {
   const selfId = authStore.user?.id;
   if (!selfId || !user?.id) return false;
   if (String(user.id) === String(selfId)) return false;
-  if (user.role === 'SUPER_ADMIN' && !isSuperAdmin.value) return false;
+  // Only a super admin may delete super admins and finance managers (the server enforces the same).
+  if (GROUPLESS_ROLES.includes(user.role) && !isSuperAdmin.value) return false;
   return true;
 };
 
@@ -526,7 +537,7 @@ const setWorkingRole = (role) => {
 watch(
   () => form.value.role,
   (role) => {
-    if (role === ROLES.SUPER_ADMIN) {
+    if (GROUPLESS_ROLES.includes(role)) {
       form.value.group = '';
       return;
     }
@@ -585,7 +596,7 @@ const openEditModal = (user) => {
   form.value = {
     email: user.email,
     name: user.name,
-    group: user.role === ROLES.SUPER_ADMIN ? '' : user.group,
+    group: GROUPLESS_ROLES.includes(user.role) ? '' : user.group,
     role: user.role,
     status: user.status,
     paymentRequestApprover: !!user.paymentRequestApprover,
@@ -821,7 +832,7 @@ const saveGroup = async () => {
 };
 
 const getGroupLabel = (code, role) => {
-  if (role === ROLES.SUPER_ADMIN) return '-';
+  if (GROUPLESS_ROLES.includes(role)) return '-';
   if (!code) return '-';
   const g = groups.value.find(x => x.code === code);
   if (g) return g.name;
@@ -1072,6 +1083,12 @@ const deleteGroup = async (group) => {
   background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(124, 58, 237, 0.2) 100%);
   color: var(--color-secondary);
   border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.role-finance_manager {
+  background: linear-gradient(135deg, rgba(31, 122, 77, 0.18) 0%, rgba(22, 101, 52, 0.18) 100%);
+  color: var(--color-success);
+  border: 1px solid rgba(31, 122, 77, 0.3);
 }
 
 .role-group_boss,

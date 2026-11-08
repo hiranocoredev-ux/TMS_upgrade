@@ -7,7 +7,7 @@ import {
 import Worklog from '../models/Worklog.js';
 import Daily from '../models/Daily.js';
 import FinanceTransaction from '../models/FinanceTransaction.js';
-import { normalizeRole, ROLES } from '../constants/roles.js';
+import { normalizeRole, ROLES, NON_MEMBER_ROLES } from '../constants/roles.js';
 import {
   estDateKeyToUtcDate,
   getESTDateKey,
@@ -55,7 +55,7 @@ export const getDashboard = async (req, res) => {
     const userQuery = {
       status: 'active',
       group: { $ne: '*' },
-      role: { $ne: 'SUPER_ADMIN' },
+      role: { $nin: NON_MEMBER_ROLES },
     };
     if (group && group !== 'all') {
       userQuery.group = group;
@@ -142,9 +142,11 @@ export const getDashboard = async (req, res) => {
     const groupsList = await User.distinct('group', {
       status: 'active',
       group: { $ne: '*' },
-      role: { $ne: 'SUPER_ADMIN' },
+      role: { $nin: NON_MEMBER_ROLES },
     });
-    groupsList.sort();
+    // A user without a group must not add an empty entry or break the sort.
+    const groupCodes = groupsList.filter((g) => typeof g === 'string' && g);
+    groupCodes.sort();
 
     // ── 6. Build cards ───────────────────────────────────────────────────
     const cards = users.map(u => {
@@ -168,7 +170,7 @@ export const getDashboard = async (req, res) => {
     // Sort: group ascending → group bosses first → name ascending.
     const isGroupBoss = (c) => c.role === ROLES.GROUP_BOSS;
     cards.sort((a, b) => {
-      const g = a.group.localeCompare(b.group, undefined, { numeric: true, sensitivity: 'base' });
+      const g = String(a.group || '').localeCompare(String(b.group || ''), undefined, { numeric: true, sensitivity: 'base' });
       if (g !== 0) return g;
       const adminDelta = (isGroupBoss(b) ? 1 : 0) - (isGroupBoss(a) ? 1 : 0);
       if (adminDelta !== 0) return adminDelta;
@@ -178,7 +180,7 @@ export const getDashboard = async (req, res) => {
     res.json({
       ok: true,
       data: {
-        groups: groupsList,
+        groups: groupCodes,
         cards,
         meta: {
           todayEST: todayStr,

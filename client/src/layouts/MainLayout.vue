@@ -15,7 +15,7 @@
         <!-- =====================
              DASHBOARD
         ====================== -->
-        <router-link :to="{ name: 'Dashboard' }" class="nav-item">
+        <router-link v-if="!isFinanceManager" :to="{ name: 'Dashboard' }" class="nav-item">
           <span class="group-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none">
               <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1v-10.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -65,7 +65,7 @@
         <!-- =====================
              WORKFLOW
         ====================== -->
-        <div class="nav-group">
+        <div v-if="!isFinanceManager" class="nav-group">
           <div
             @click="workflowMenuOpen = !workflowMenuOpen"
             class="nav-item nav-group-header"
@@ -94,7 +94,7 @@
         <!-- =====================
              COMPETITION
         ====================== -->
-        <div class="nav-group">
+        <div v-if="!isFinanceManager" class="nav-group">
           <div
             @click="competitionMenuOpen = !competitionMenuOpen"
             class="nav-item nav-group-header"
@@ -125,7 +125,7 @@
         <!-- ==========================================================================================
                              Daily Report Management     Created By : Tom(2026/2/24 11:22 AM)
         ========================================================================================== -->
-        <div class="nav-group report-nav-group">
+        <div v-if="!isFinanceManager" class="nav-group report-nav-group">
           <div @click="dailyreportMenuOpen = !dailyreportMenuOpen" class="nav-item nav-group-header"
             :class="{ active: isDailyReportRoute }">
             <span class="group-icon" aria-hidden="true">
@@ -145,7 +145,7 @@
         <!-- =====================
              PROFILES
         ====================== -->
-        <div class="nav-group">
+        <div v-if="!isFinanceManager" class="nav-group">
           <div @click="profileMenuOpen = !profileMenuOpen" class="nav-item nav-group-header"
             :class="{ active: isProfileRoute }">
             <span class="group-icon" aria-hidden="true">
@@ -317,7 +317,7 @@
           <span>Audit Logs</span>
         </router-link>
 
-        <router-link :to="{ name: 'NotificationSettings' }" class="nav-item">
+        <router-link v-if="!isFinanceManager" :to="{ name: 'NotificationSettings' }" class="nav-item">
           <span class="group-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none">
               <path d="M6 8a6 6 0 1 1 12 0v5l2 3H4l2-3V8Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -327,7 +327,7 @@
           <span>Notify Settings</span>
         </router-link>
 
-        <router-link :to="{ name: 'SendMessage' }" class="nav-item">
+        <router-link v-if="!isFinanceManager" :to="{ name: 'SendMessage' }" class="nav-item">
           <span class="group-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none">
               <path d="M22 2L11 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
@@ -446,7 +446,7 @@ import { useRoute } from 'vue-router';
 import { useAuthStore } from '../composables/useAuth';
 import { useThemeAppearance } from '../composables/useThemeAppearance';
 import { canViewAuditLogs, hasAnyRole } from '../utils/permissions';
-import { ROLES, LEGACY_ROLES } from '../constants/roles';
+import { ROLES, LEGACY_ROLES, isFinanceManagerRole } from '../constants/roles';
 import UserAvatar from '../components/UserAvatar.vue';
 import ReportNavSubmenu from '../components/navigation/ReportNavSubmenu.vue';
 import { getReportsByUser } from '../services/reports';
@@ -503,8 +503,13 @@ const userMenuOpen = ref(false);
 
 const isBadge = ref(false)
 const showActions = computed(() => isBadge.value)
+/** Finance manager: sidebar shows Finance and Summarize only. */
+const isFinanceManager = computed(() =>
+  isFinanceManagerRole(authStore.user?.role, authStore.user?.degree)
+);
+// Finance managers get no report reminders, so there is nothing to set up.
 const notifySetupWarning = computed(() =>
-  !!authStore.user && (authStore.user.notification?.needsSetupWarning ?? true)
+  !!authStore.user && !isFinanceManager.value && (authStore.user.notification?.needsSetupWarning ?? true)
 );
 const reportRejectWarning = ref({ show: false, reason: '', periodLabel: '', dateKey: '' });
 
@@ -591,7 +596,8 @@ function keysForPeriod(period) {
 
 async function refreshRejectWarning() {
   const uid = authStore.user?.id || authStore.user?._id;
-  if (!uid) {
+  // Finance managers write no reports, so there is nothing to warn about.
+  if (!uid || isFinanceManager.value) {
     reportRejectWarning.value = { show: false, reason: '', periodLabel: '', dateKey: '' };
     return;
   }

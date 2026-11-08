@@ -52,6 +52,8 @@ export const getRoleDisplayName = (role, degree) => {
       return 'Group Boss';
     case ROLES.GROUP_MEMBER:
       return 'Member';
+    case ROLES.FINANCE_MANAGER:
+      return 'Finance Manager';
     default:
       return role || 'Unknown';
   }

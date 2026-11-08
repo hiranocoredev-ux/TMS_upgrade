@@ -4,16 +4,19 @@ import PaymentRequest, {
   PAYMENT_REQUEST_FLOW,
   PAYMENT_REQUEST_STATUS,
 } from '../models/PaymentRequest.js';
-import { normalizeRole, ROLES } from '../constants/roles.js';
+import { normalizeRole, ROLES, canManageAllFinance } from '../constants/roles.js';
 import { createErrorResponse, createSuccessResponse } from '../utils/errors.js';
 
 const isSuperAdmin = (u) => normalizeRole(u?.role, u?.degree) === ROLES.SUPER_ADMIN;
 const isGroupBoss = (u) => normalizeRole(u?.role, u?.degree) === ROLES.GROUP_BOSS;
 
-/** Super admin or users flagged as payment request reviewers (set by super admin). */
+/**
+ * Super admin, finance manager, or users flagged as payment request reviewers
+ * (set by super admin).
+ */
 export const canHandleBossToPlatformRequests = (u) => {
   if (!u) return false;
-  if (isSuperAdmin(u)) return true;
+  if (canManageAllFinance(u.role, u.degree)) return true;
   return u.paymentRequestApprover === true;
 };
 

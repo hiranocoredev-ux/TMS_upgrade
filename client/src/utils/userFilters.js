@@ -1,20 +1,21 @@
 /**
  * User filtering utilities
- * Excludes super admin from member lists and calculations
+ * Excludes super admin and finance manager (no group, not team members) from
+ * member lists and calculations
  */
 
-import { ROLES } from '../constants/roles';
+import { ROLES, GROUPLESS_ROLES } from '../constants/roles';
 
 /**
- * Filter out super admin users from a user array
+ * Filter out super admin and finance manager users from a user array
  * @param {Array} users - Array of user objects
- * @returns {Array} Filtered array without super admin users
+ * @returns {Array} Filtered array with team members only
  */
 export const excludeSuperAdmin = (users) => {
   if (!Array.isArray(users)) return [];
   return users.filter(user => {
     const role = user.role || user.user?.role;
-    return role !== ROLES.SUPER_ADMIN;
+    return !GROUPLESS_ROLES.includes(role);
   });
 };
 
@@ -38,8 +39,7 @@ export const excludeSuperAdminFromMetrics = (byUser) => {
   if (!Array.isArray(byUser)) return [];
   return byUser.filter(item => {
     const user = item.user || item;
-    const role = user.role;
-    return role !== ROLES.SUPER_ADMIN;
+    return !GROUPLESS_ROLES.includes(user.role);
   });
 };
 

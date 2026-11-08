@@ -246,7 +246,7 @@ import { useAuthStore } from '../composables/useAuth';
 import { fetchUsers } from '../services/users';
 import { fetchGroups } from '../services/admin';
 import { excludeSuperAdmin } from '../utils/userFilters';
-import { normalizeRole, ROLES } from '../constants/roles';
+import { canManageAllFinance } from '../constants/roles';
 import {
     isFinanceManagerUser,
     isGlobalFinanceViewerUser,
@@ -265,12 +265,10 @@ import EditPeriodModal from '../components/finance/EditPeriodModal.vue';
 
 const authStore = useAuthStore();
 
-/** Super admin or group boss: may create / edit week plans (group boss: own group only). */
+/** Super admin, finance manager or group boss: may create / edit week plans (group boss: own group only). */
 const isBoss = computed(() => isFinanceManagerUser(authStore.user));
-/** Weeks themselves are created / edited by super admin only. */
-const isSuperAdmin = computed(
-    () => normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SUPER_ADMIN
-);
+/** Weeks themselves are created / edited by super admin or finance manager. */
+const isSuperAdmin = computed(() => canManageAllFinance(authStore.user?.role, authStore.user?.degree));
 // Every user can browse week plans of all groups.
 const showGroupFilter = computed(() => true);
 

@@ -3,7 +3,7 @@ import dotenv from 'dotenv';
 import User from '../models/User.js';
 import { createErrorResponse } from '../utils/errors.js';
 import { hasAnyRole, hasAdminPrivileges } from '../utils/roleMapper.js';
-import { normalizeRole, ROLES } from '../constants/roles.js';
+import { normalizeRole, ROLES, isFinanceManagerRole } from '../constants/roles.js';
 
 dotenv.config();
 
@@ -92,7 +92,10 @@ export const requireRole = (...roles) => {
   };
 };
 
-/** Finance create/update/delete/approve: super admin or group boss (legacy ADMIN/BOSS / TEAM_BOSS degree included) */
+/**
+ * Finance create/update/delete/approve: super admin, group boss (legacy ADMIN/BOSS /
+ * TEAM_BOSS degree included) or finance manager.
+ */
 export const requireFinanceManager = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json(createErrorResponse(
@@ -100,7 +103,7 @@ export const requireFinanceManager = (req, res, next) => {
       'Authentication required'
     ));
   }
-  if (hasAdminPrivileges(req.user)) {
+  if (hasAdminPrivileges(req.user) || isFinanceManagerRole(req.user.role, req.user.degree)) {
     return next();
   }
   return res.status(403).json(createErrorResponse(

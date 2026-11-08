@@ -37,7 +37,7 @@ import {
   isGlobalFinanceViewer,
   FINANCE_META_GROUPS,
 } from "../utils/financeTeamScope.js";
-import { isSuperAdminRole } from "../constants/roles.js";
+import { isSuperAdminRole, canManageAllFinance } from "../constants/roles.js";
 dotenv.config();
 
 const OUTCOME_APPROVAL_THRESHOLD = parseFloat(
@@ -390,10 +390,11 @@ router.post(
           );
       }
 
-      // Determine userId: boss can create for any user, otherwise use own userId
+      // Determine userId: boss / finance manager can create for another user, otherwise use own userId
       let targetUserId = req.user._id;
       if (validatedData.userId) {
-        const canSetOtherUser = hasAdminPrivileges(req.user);
+        const canSetOtherUser =
+          hasAdminPrivileges(req.user) || canManageAllFinance(req.user.role, req.user.degree);
         if (!canSetOtherUser) {
           return res
             .status(403)
@@ -837,10 +838,10 @@ router.delete(
         }
       }
 
-      // Cannot delete approved transactions (unless boss/admin)
+      // Cannot delete approved transactions (unless boss/admin/finance manager)
       if (transaction.approvalStatus === "approved") {
         if (
-          req.user.role !== ROLES.SUPER_ADMIN &&
+          !canManageAllFinance(req.user.role, req.user.degree) &&
           !hasAdminPrivileges(req.user)
         ) {
           return res
@@ -2714,12 +2715,12 @@ const updatePeriodicPlanSchema = z.object({
   note: z.string().optional(),
 });
 /**
- * Week plans may be created / edited by super admin (any user) or a group boss
- * (members of their own group only). Plain members never reach here
- * (requireFinanceManager).
+ * Week plans may be created / edited by super admin or finance manager (any
+ * user) or a group boss (members of their own group only). Plain members never
+ * reach here (requireFinanceManager).
  */
 const canManageWeekPlanFor = (reqUser, targetGroup) => {
-  if (isSuperAdminRole(reqUser.role, reqUser.degree)) return true;
+  if (canManageAllFinance(reqUser.role, reqUser.degree)) return true;
   const reqGroup = reqUser.group;
   if (reqGroup && FINANCE_META_GROUPS.has(reqGroup)) return true;
   return !!reqGroup && targetGroup === reqGroup;
@@ -3137,8 +3138,8 @@ const financePeriodSchema = z.object({
 const updateFinancePeriodSchema = financePeriodSchema.partial();
 
 
-// Weeks are created / edited by super admin only.
-router.post('/periods', requireRole('SUPER_ADMIN'), async (req, res, next) => {
+// Weeks are created / edited by super admin or finance manager.
+router.post('/periods', requireRole('SUPER_ADMIN', 'FINANCE_MANAGER'), async (req, res, next) => {
   try {
     const data = financePeriodSchema.parse(req.body);
     const period = await FinancePeriod.create({
@@ -3171,7 +3172,7 @@ router.post('/periods', requireRole('SUPER_ADMIN'), async (req, res, next) => {
   }
 });
 
-router.put('/periods/:id', requireRole('SUPER_ADMIN'), async (req, res, next) => {
+router.put('/periods/:id', requireRole('SUPER_ADMIN', 'FINANCE_MANAGER'), async (req, res, next) => {
   try {
     const period = await FinancePeriod.findById(req.params.id);
     if (!period) {

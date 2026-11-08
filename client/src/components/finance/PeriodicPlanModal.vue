@@ -67,7 +67,7 @@ import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import { useFinance } from '../../composables/useFinance';
 import { fetchUsers } from '../../services/users';
 import { useAuthStore } from '../../composables/useAuth';
-import { normalizeRole, ROLES } from '../../constants/roles';
+import { canManageAllFinance } from '../../constants/roles';
 import { excludeSuperAdmin } from '../../utils/userFilters';
 import { formatDate } from '../../utils/financeHelpers';
 import ReportRichEditor from '../reports/ReportRichEditor.vue';
@@ -184,13 +184,13 @@ const save = async () => {
 /* Load users */
 
 const authStore = useAuthStore();
-const isSuperAdmin = computed(
-  () => normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SUPER_ADMIN
-);
+/** Super admin or finance manager: may plan for every team. */
+const isSuperAdmin = computed(() => canManageAllFinance(authStore.user?.role, authStore.user?.degree));
 
 /**
- * Users the viewer may plan for: super admin -> every user, group boss -> own
- * group only (the server enforces the same rule). Super admins are never planned for.
+ * Users the viewer may plan for: super admin / finance manager -> every user,
+ * group boss -> own group only (the server enforces the same rule). Super admins
+ * and finance managers are never planned for.
  */
 const loadUsers = async () => {
   try {

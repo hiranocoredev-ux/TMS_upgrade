@@ -1,7 +1,13 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import store from '../store';
 import { canAccessAdmin, canViewAuditLogs, hasAnyRole } from '../utils/permissions';
-import { ROLES, LEGACY_ROLES, normalizeRole } from '../constants/roles.js';
+import {
+  ROLES,
+  LEGACY_ROLES,
+  normalizeRole,
+  isFinanceManagerRole,
+  FINANCE_MANAGER_ROUTE_NAMES,
+} from '../constants/roles.js';
 
 /**
  * Report RBAC is identical for daily, weekly, and monthly  only `reportPeriod` / URLs differ.
@@ -657,6 +663,23 @@ router.beforeEach((to, from, next) => {
   if (to.meta.requiresAuth !== false && !isAuthenticated) {
     next('/login');
     return;
+  }
+
+  // Finance manager: only Finance, Summarize and their own profile. Anything
+  // else (including the Dashboard landing page) goes to Finance Overview.
+  if (isAuthenticated && to.meta.requiresAuth !== false) {
+    let fmUser = store.state.auth.user;
+    if (!fmUser && hasUser) {
+      try {
+        fmUser = JSON.parse(localStorage.getItem('user'));
+      } catch {
+        /* ignore */
+      }
+    }
+    if (fmUser && isFinanceManagerRole(fmUser.role, fmUser.degree) && !FINANCE_MANAGER_ROUTE_NAMES.has(to.name)) {
+      next({ name: 'FinanceOverview', replace: true });
+      return;
+    }
   }
 
   // Super admin: blocked from author/group-team routes for daily, weekly, and monthly (redirect to matching "All …" page).

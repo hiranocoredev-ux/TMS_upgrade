@@ -10,7 +10,7 @@ import WorktimeFinalSync from '../models/WorktimeFinalSync.js';
 import CompetitionWorktimeDayRule from '../models/CompetitionWorktimeDayRule.js';
 import CompetitionWorktimeUserDayRule from '../models/CompetitionWorktimeUserDayRule.js';
 import { buildDayTargets, DEFAULT_TARGET_MINUTES as SHARED_DEFAULT_TARGET_MINUTES } from '../services/worktimeTargets.js';
-import { normalizeRole, ROLES } from '../constants/roles.js';
+import { normalizeRole, ROLES, isNonMemberRole, isFinanceManagerRole } from '../constants/roles.js';
 
 const LEGACY_MANUAL_ADJUSTMENT_ID = 'legacy';
 
@@ -114,9 +114,8 @@ export const getChartData = async (req, res) => {
       .select('name email group hubstaff_id role degree avatarUrl')
       .sort({ name: 1 })
       .lean();
-    const visibleUsers = users.filter(
-      (u) => normalizeRole(u.role, u.degree) !== ROLES.SUPER_ADMIN
-    );
+    // Super admins and finance managers are not workers.
+    const visibleUsers = users.filter((u) => !isNonMemberRole(u.role, u.degree));
 
     const groups = [
       ...new Set(
@@ -250,8 +249,10 @@ export const getWorkflowUsers = async (req, res) => {
         .lean(),
       Group.find().select('code sortOrder').lean(),
     ]);
-    // Listed by team, each team's boss first, then by name.
-    res.json({ ok: true, data: { users: sortUsersForDisplay(rows, groups) } });
+    // Listed by team, each team's boss first, then by name. Finance managers
+    // track no worktime, so they are left out.
+    const workers = rows.filter((u) => !isFinanceManagerRole(u.role, u.degree));
+    res.json({ ok: true, data: { users: sortUsersForDisplay(workers, groups) } });
   } catch (err) {
     res.status(500).json({ ok: false, message: err.message });
   }
