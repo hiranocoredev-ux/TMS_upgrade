@@ -125,12 +125,32 @@
           <input v-model="form.category" required placeholder="e.g., Office Supplies" />
         </div>
 
-        <!-- Transaction URL (stored as the transaction's description) -->
+        <!-- Description: what was received / paid and how -->
+        <div class="form-group">
+          <label for="transaction-description">Description *</label>
+          <textarea
+            id="transaction-description"
+            v-model="form.description"
+            rows="3"
+            required
+            :maxlength="MAX_DESCRIPTION_LENGTH"
+            placeholder="e.g. Received 500 USDT from Client ABC via TRC-20 to the team wallet"
+            :aria-invalid="descriptionError ? 'true' : 'false'"
+            aria-describedby="transaction-description-hint"
+            @input="descriptionError = ''"
+          />
+          <small v-if="descriptionError" id="transaction-description-hint" class="field-error">{{ descriptionError }}</small>
+          <small v-else id="transaction-description-hint" class="field-hint">
+            How much was received or paid, and how (coin, network, wallet, counterparty).
+          </small>
+        </div>
+
+        <!-- Transaction URL -->
         <div class="form-group">
           <label for="transaction-url">Transaction URL *</label>
           <input
             id="transaction-url"
-            v-model="form.description"
+            v-model="form.transactionUrl"
             type="url"
             required
             inputmode="url"
@@ -186,6 +206,7 @@ import { getESTDateKey } from '../../utils/timezoneHelpers';
 import DateSelector from './DateSelector.vue';
 import {
   isTransactionUrl,
+  MAX_DESCRIPTION_LENGTH,
   MAX_TRANSACTION_URL_LENGTH,
   TRANSACTION_URL_MESSAGE
 } from '../../utils/transactionUrl';
@@ -207,7 +228,8 @@ const { addTransaction, editTransaction } = useFinance();
 
 const users = ref([]);
 const saving = ref(false);
-/** Shown under the Transaction URL field when it is missing or not a link. */
+/** Shown under the Description / Transaction URL fields when missing or invalid. */
+const descriptionError = ref('');
 const urlError = ref('');
 
 const isEdit = computed(() => !!props.transaction);
@@ -220,6 +242,7 @@ const form = ref({
   source: '',
   category: '',
   description: '',
+  transactionUrl: '',
   throughTeamWallet: true,
   isTron: false,
   date: getESTDateKey(),
@@ -283,6 +306,7 @@ watch(
         source: t.source || '',
         category: t.category || '',
         description: t.description || '',
+        transactionUrl: t.transactionUrl || '',
         // Legacy rows have no value -> treat as true.
         throughTeamWallet: t.throughTeamWallet !== false,
         // Legacy rows have no value -> treat as not Tron.
@@ -302,12 +326,15 @@ watch(
         source: '',
         category: '',
         description: '',
+        transactionUrl: '',
         throughTeamWallet: true,
         isTron: false,
         date: getESTDateKey(),
         currency: 'USD'
       };
     }
+    descriptionError.value = '';
+    urlError.value = '';
   },
   { immediate: true }
 );
@@ -334,17 +361,14 @@ const save = async () => {
     return;
   }
 
-  // Required on every save, including edits of older transactions saved without one.
-  const transactionUrl = String(form.value.description || '').trim();
-  if (!transactionUrl) {
-    urlError.value = 'Transaction URL is required';
-    return;
-  }
-  if (!isTransactionUrl(transactionUrl)) {
-    urlError.value = TRANSACTION_URL_MESSAGE;
-    return;
-  }
-  urlError.value = '';
+  // Both are required on every save, including edits of older transactions saved without them.
+  const description = String(form.value.description || '').trim();
+  const transactionUrl = String(form.value.transactionUrl || '').trim();
+  descriptionError.value = description ? '' : 'Description is required';
+  urlError.value = !transactionUrl
+    ? 'Transaction URL is required'
+    : isTransactionUrl(transactionUrl) ? '' : TRANSACTION_URL_MESSAGE;
+  if (descriptionError.value || urlError.value) return;
 
   saving.value = true;
 
@@ -358,7 +382,8 @@ const save = async () => {
       // Derived client-side for an immediate preview; the server re-derives it.
       amount: computedAmount.value,
       currency: form.value.currency,
-      description: transactionUrl,
+      description,
+      transactionUrl,
       throughTeamWallet: form.value.throughTeamWallet,
       isTron: effectiveIsTron.value,
       date: formatDateISO(new Date(form.value.date))
@@ -623,7 +648,8 @@ onMounted(() => {
   color: var(--color-error, #b42318);
 }
 
-.form-group input[aria-invalid='true'] {
+.form-group input[aria-invalid='true'],
+.form-group textarea[aria-invalid='true'] {
   border-color: var(--color-error, #b42318);
 }
 

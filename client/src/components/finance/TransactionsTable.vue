@@ -49,7 +49,14 @@
           <td>
             <StatusChip :status="transaction.status" />
           </td>
-          <td>{{ transaction.source || transaction.category || '-' }}</td>
+          <td class="source-cell">
+            <span>{{ transaction.source || transaction.category || '-' }}</span>
+            <span
+              v-if="transaction.description"
+              class="tx-description"
+              :title="transaction.description"
+            >{{ transaction.description }}</span>
+          </td>
           <td class="link-cell">
             <a
               v-if="transactionLink(transaction)"
@@ -299,6 +306,24 @@ const getRowClass = (transaction) => {
 .expense-value {
   color: var(--color-error);
   font-weight: 500;
+}
+
+.source-cell {
+  max-width: 280px;
+}
+
+/* What was received / paid and how — two lines here, full text on hover. */
+.tx-description {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-tertiary);
+  overflow-wrap: anywhere;
 }
 
 .link-cell {

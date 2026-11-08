@@ -51,9 +51,10 @@ const router = express.Router();
 router.use(requireAuth);
 
 /**
- * The transaction URL (stored in `description`): a full http(s) link to the
- * transaction, e.g. a block explorer or payment page. Required on create and
- * on every edit. Only http(s) is accepted so the link is always safe to open.
+ * Every transaction needs two things, on create and on every edit:
+ * - transactionUrl: a full http(s) link to the transaction, e.g. a block
+ *   explorer or payment page. Only http(s) is accepted so it is safe to open.
+ * - description: what was received / paid and how (amount, coin, network...).
  */
 const MAX_TRANSACTION_URL_LENGTH = 2000;
 const TRANSACTION_URL_MESSAGE = "Transaction URL must be a full link starting with https:// or http://";
@@ -72,6 +73,12 @@ const transactionUrlField = z
   .trim()
   .min(1, "Transaction URL is required")
   .refine(isTransactionUrl, TRANSACTION_URL_MESSAGE);
+const MAX_DESCRIPTION_LENGTH = 2000;
+const descriptionField = z
+  .string({ required_error: "Description is required" })
+  .trim()
+  .min(1, "Description is required")
+  .max(MAX_DESCRIPTION_LENGTH, `Description must be at most ${MAX_DESCRIPTION_LENGTH} characters`);
 
 const transactionSchema = z.object({
   userId: z.string().min(1, "UserId is required"),
@@ -82,7 +89,8 @@ const transactionSchema = z.object({
   currency: z.string().default("USD"),
   category: z.string().optional(),
   source: z.string().optional(),
-  description: transactionUrlField,
+  description: descriptionField,
+  transactionUrl: transactionUrlField,
   throughTeamWallet: z.boolean().optional(),
   isTron: z.boolean().optional(),
   attachments: z.array(z.string()).optional(),
@@ -278,9 +286,11 @@ router.get("/transactions", async (req, res, next) => {
     }
 
     if (description) {
-      // Plain-text search: URLs contain ?, +, ( and . which must not act as a pattern.
+      // Plain-text search over the description and the transaction URL. URLs
+      // contain ?, +, ( and . which must not act as a pattern.
       const escaped = String(description).slice(0, 2000).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      query.description = { $regex: escaped, $options: "i" };
+      const match = { $regex: escaped, $options: "i" };
+      query.$or = [{ description: match }, { transactionUrl: match }];
     }
 
     if (from || to) {
@@ -621,9 +631,15 @@ router.put(
 
       const validatedData = updateTransactionSchema.parse(req.body);
 
-      // Every edit must leave the transaction with a valid URL, so older
-      // transactions saved without one get it the next time they are edited.
-      if (validatedData.description === undefined && !isTransactionUrl(transaction.description)) {
+      // Every edit must leave the transaction with a description and a valid
+      // URL, so older transactions saved without them get both the next time
+      // they are edited.
+      if (validatedData.description === undefined && !String(transaction.description || "").trim()) {
+        return res
+          .status(400)
+          .json(createErrorResponse("VALIDATION_ERROR", "Description is required", 400));
+      }
+      if (validatedData.transactionUrl === undefined && !isTransactionUrl(transaction.transactionUrl)) {
         return res
           .status(400)
           .json(createErrorResponse("VALIDATION_ERROR", "Transaction URL is required", 400));

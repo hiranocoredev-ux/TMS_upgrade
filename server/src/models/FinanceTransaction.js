@@ -50,7 +50,14 @@ const financeTransactionSchema = new mongoose.Schema({
       return this.type === 'income';
     }
   },
+  // What was received / paid and how (amount, coin, network, counterparty...).
   description: {
+    type: String,
+    default: ''
+  },
+  // Full http(s) link to the transaction (block explorer, payment page...).
+  // Older transactions have none until they are next edited.
+  transactionUrl: {
     type: String,
     default: ''
   },

@@ -55,11 +55,11 @@
         </select>
       </div>
       <div class="filter-group">
-        <label>Transaction URL:</label>
+        <label>Description / URL:</label>
         <input
           v-model="filters.description"
           type="text"
-          placeholder="Search URL..."
+          placeholder="Search description or URL..."
           @input="debounceLoad"
           class="filter-input"
         />
@@ -321,8 +321,9 @@ const filteredTransactions = computed(() => {
   
   if (filters.value.description) {
     const desc = filters.value.description.toLowerCase();
-    filtered = filtered.filter(t => 
-      (t.description || '').toLowerCase().includes(desc)
+    filtered = filtered.filter(t =>
+      (t.description || '').toLowerCase().includes(desc) ||
+      (t.transactionUrl || '').toLowerCase().includes(desc)
     );
   }
   
