@@ -109,6 +109,16 @@
       </div>
 
       <div v-else-if="data" class="sz-body" :class="{ 'is-refreshing': loading }">
+        <!-- Weekly: transactions (or today) outside every week of the month never show in any week. -->
+        <div v-if="weekCoverageNote" class="sz-coverage" role="status">
+          <span class="sz-coverage__icon" aria-hidden="true">!</span>
+          <p class="sz-coverage__text">
+            {{ weekCoverageNote }}
+            <router-link :to="{ name: 'WeeklyPlansManage' }" class="sz-coverage__link">Set up weeks in Weekly Plans</router-link>
+            · They are already counted in Monthly Summarize.
+          </p>
+        </div>
+
         <!-- GROUP RANKING -->
         <SummarizeGroupRanking
           :groups="rankedGroups"
@@ -736,6 +746,29 @@ const hasNumber = (v) => typeof v === 'number' && Number.isFinite(v);
 const periodRangeLabel = (p) =>
   p ? `${dayFormatter.format(new Date(p.startDate))} – ${dayFormatter.format(new Date(p.endDate))}` : '';
 const periodLabel = (p) => (p ? `${p.definition} · ${periodRangeLabel(p)}` : '');
+
+/** "Nov 8" from a YYYY-MM-DD key. */
+const dayLabel = (dateKey) => dayFormatter.format(new Date(`${dateKey}T00:00:00Z`));
+
+/**
+ * Weekly view: explain transactions (and today) that fall outside every week of
+ * the month — they show in no week until that week is set up in Weekly Plans.
+ */
+const weekCoverageNote = computed(() => {
+  const c = data.value?.weekCoverage;
+  if (!c || viewMode.value !== 'week') return '';
+  const parts = [];
+  if (c.outsideCount > 0) {
+    const days = c.outsideDates.map(dayLabel).join(', ');
+    const what = c.outsideCount === 1 ? '1 transaction' : `${c.outsideCount} transactions`;
+    const amount = c.outsideIncome > 0 ? ` (${money(c.outsideIncome)} income)` : '';
+    parts.push(`${what}${amount} dated ${days} ${c.outsideCount === 1 ? 'is' : 'are'} not in any week of ${formatMonth(month.value)}, so ${c.outsideCount === 1 ? 'it does' : 'they do'} not show here.`);
+  }
+  if (!c.todayCovered) {
+    parts.push(`Today (${dayLabel(c.today)}) is not in any week yet.`);
+  }
+  return parts.join(' ');
+});
 /** "result / plan" under a count percent; empty when nothing was entered. */
 /** "17 of 20 accounts", shown under a member's profile percentage. */
 const profileNote = (p) =>
@@ -1726,6 +1759,43 @@ function downloadCsv(rows) {
 
 .sz-note--error {
   color: var(--sz-low);
+}
+
+/* Weekly: data outside every week of the month. */
+.sz-coverage {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--sz-mid, #9a6700);
+  border-left-width: 4px;
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(in srgb, var(--sz-mid, #9a6700) 8%, transparent);
+}
+
+.sz-coverage__icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--sz-mid, #9a6700);
+}
+
+.sz-coverage__text {
+  margin: 0;
+  font-size: var(--font-size-sm, 13px);
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.sz-coverage__link {
+  font-weight: 600;
+  color: var(--color-primary, #1f4e8c);
 }
 
 .sz-note strong {

@@ -201,6 +201,33 @@ export const getSummarize = async (req, res, next) => {
       worktimeDeductionByUser: new Map(deductionRows.map((r) => [String(r.userId), Number(r.points) || 0])),
     });
 
+    // Weekly view: say when today, or counted transactions of this month, fall
+    // outside every week. Those never appear in any week, which looks like
+    // missing data unless the page says why. Same date test as the week totals.
+    let weekCoverage = null;
+    if (mode === 'week' && userIds.length > 0) {
+      const monthWindow = monthRange(month);
+      const inSomeWeek = (date) =>
+        periods.some((p) => date >= new Date(p.startDate) && date <= new Date(p.endDate));
+      const monthRows = await FinanceTransaction.find(withCountable({
+        userId: { $in: userIds },
+        date: { $gte: monthWindow.start, $lte: monthWindow.end },
+        status: { $in: ['accepted', 'pending'] },
+      }))
+        .select('date amount type')
+        .lean();
+      const outside = monthRows.filter((t) => !inSomeWeek(new Date(t.date)));
+      const today = getESTDateKey();
+      const todayInMonth = today >= toDateKey(monthWindow.start) && today <= toDateKey(monthWindow.end);
+      weekCoverage = {
+        today,
+        todayCovered: !todayInMonth || periods.some((p) => toDateKey(p.startDate) <= today && today <= toDateKey(p.endDate)),
+        outsideCount: outside.length,
+        outsideIncome: outside.filter((t) => t.type === 'income').reduce((s, t) => s + (Number(t.amount) || 0), 0),
+        outsideDates: [...new Set(outside.map((t) => toDateKey(t.date)))].sort(),
+      };
+    }
+
     res.json(
       createSuccessResponse({
         mode,
@@ -214,6 +241,7 @@ export const getSummarize = async (req, res, next) => {
         groupTypes: GROUP_TYPE_VALUES,
         canEditProfileTargets: isSuperAdmin(reqUser),
         profiles: profileSummary,
+        weekCoverage,
         ...summary,
       }),
     );
