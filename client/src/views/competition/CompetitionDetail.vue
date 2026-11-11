@@ -338,7 +338,7 @@ import {
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
-const canAdmin = computed(() => hasAnyRole(auth.user, [ROLES.SUPER_ADMIN]));
+const canAdmin = computed(() => hasAnyRole(auth.user, [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN]));
 
 const loading = ref(false);
 const error = ref('');

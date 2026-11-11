@@ -16,7 +16,7 @@ import { AppError, createSuccessResponse } from '../utils/errors.js';
 import { log as auditLog, getRequestMeta } from '../utils/audit.js';
 import { isValidMonthFormat } from '../utils/financeHelpers.js';
 import { getESTDateKey } from '../utils/estTime.js';
-import { normalizeRole, ROLES } from '../constants/roles.js';
+import { isFullAdminRole, NON_MEMBER_ROLES } from '../constants/roles.js';
 import { buildSummarize } from '../utils/summarize/buildSummarize.js';
 import { monthRangeDates } from '../utils/businessMonth.js';
 import { buildProfileSummarize } from '../utils/summarize/buildProfileSummarize.js';
@@ -36,7 +36,8 @@ const monthRange = (month) => {
 
 const toDateKey = (d) => new Date(d).toISOString().slice(0, 10);
 
-const isSuperAdmin = (user) => !!user && normalizeRole(user.role, user.degree) === ROLES.SUPER_ADMIN;
+// Super admin or admin: may enter weekly inputs / profile targets / WorkTime deductions (not finance)
+const isSuperAdmin = (user) => !!user && isFullAdminRole(user.role, user.degree);
 
 /**
  * Default week for a month: the period containing today (EST), otherwise the
@@ -58,8 +59,9 @@ const pickDefaultPeriod = (periods) => {
  * call counts per member and the weekly group counts (getting citizen for normal
  * teams, job interviews / job offers for job teams). A month sums its week periods.
  *
- * Every signed-in user sees all members of all groups; only super admin may enter
- * the weekly counts. SUPER_ADMIN and ungrouped users are not listed as members.
+ * Every signed-in user sees all members of all groups; only super admin / admin may enter
+ * the weekly counts. Non-member roles (super admin, admin, finance manager) and
+ * ungrouped users are not listed as members.
  */
 export const getSummarize = async (req, res, next) => {
   try {
@@ -94,7 +96,7 @@ export const getSummarize = async (req, res, next) => {
 
     /* ---------- members listed (every team, for every signed-in user) ---------- */
     const reqUser = req.user;
-    const userQuery = { role: { $ne: 'SUPER_ADMIN' }, group: { $nin: ['SUPER_ADMIN', 'ADMIN', null, ''] } };
+    const userQuery = { role: { $nin: NON_MEMBER_ROLES }, group: { $nin: ['SUPER_ADMIN', 'ADMIN', null, ''] } };
 
     const [users, groups] = await Promise.all([
       User.find(userQuery).select('_id name email role group status avatarUrl workingRole').lean(),
@@ -345,7 +347,7 @@ const worktimeDeductionSchema = z.object({
 });
 
 /**
- * PUT /summarize/worktime-deduction   (super admin only)
+ * PUT /summarize/worktime-deduction   (super admin / admin only)
  * Body: { periodId, userId, points }
  *
  * Sets how many percentage points come off a member's Final WorkTime % for one
@@ -354,10 +356,10 @@ const worktimeDeductionSchema = z.object({
  */
 export const saveWorktimeDeduction = async (req, res, next) => {
   try {
-    // The route is already limited to super admin; check again because this
+    // The route is already limited to super admin / admin; check again because this
     // changes a member's score.
     if (!isSuperAdmin(req.user)) {
-      throw new AppError('INSUFFICIENT_PERMISSIONS', 'Only super admin can change WorkTime deductions', 403);
+      throw new AppError('INSUFFICIENT_PERMISSIONS', 'Only super admin or admin can change WorkTime deductions', 403);
     }
     const { periodId, userId, points } = worktimeDeductionSchema.parse(req.body || {});
 

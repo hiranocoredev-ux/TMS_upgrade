@@ -244,7 +244,7 @@ const presetForm = ref({
 });
 
 const canManageTargets = computed(() =>
-  hasAnyRole(authStore.user, [ROLES.SUPER_ADMIN])
+  hasAnyRole(authStore.user, [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN])
 );
 
 const toLabel = (minutes) => {

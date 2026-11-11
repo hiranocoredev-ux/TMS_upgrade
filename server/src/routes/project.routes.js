@@ -6,6 +6,7 @@ import Task from '../models/Task.js';
 import { createErrorResponse, createSuccessResponse } from '../utils/errors.js';
 import { log as auditLog, getRequestMeta } from '../utils/audit.js';
 import { hasAdminPrivileges, ROLES, normalizeRole } from '../utils/roleMapper.js';
+import { isFullAdminRole } from '../constants/roles.js';
 import { projectPermissions } from '../utils/permissions/entityPermissions.js';
 import dotenv from 'dotenv';
 
@@ -120,7 +121,7 @@ router.get('/', async (req, res, next) => {
       const projectObj = { ...project };
       // Only owner and boss/admin can see clientContacts
       const isOwner = project.ownerUserId._id.toString() === user._id.toString();
-      const isBossOrAdmin = user.role === ROLES.SUPER_ADMIN || hasAdminPrivileges(user);
+      const isBossOrAdmin = isFullAdminRole(user.role, user.degree) || hasAdminPrivileges(user);
       
       if (!isOwner && !isBossOrAdmin) {
         delete projectObj.clientContacts;
@@ -174,7 +175,7 @@ router.get('/:id', async (req, res, next) => {
     // Hide client contacts if not owner or admin
     const projectObj = project.toObject();
     const perms = projectPermissions.getPermissions(req.user, project);
-    if (!perms.isOwner && !hasAdminPrivileges(req.user) && req.user.role !== ROLES.SUPER_ADMIN) {
+    if (!perms.isOwner && !hasAdminPrivileges(req.user) && !isFullAdminRole(req.user.role, req.user.degree)) {
       delete projectObj.clientContacts;
     }
 

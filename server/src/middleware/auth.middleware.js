@@ -3,7 +3,13 @@ import dotenv from 'dotenv';
 import User from '../models/User.js';
 import { createErrorResponse } from '../utils/errors.js';
 import { hasAnyRole, hasAdminPrivileges } from '../utils/roleMapper.js';
-import { normalizeRole, ROLES, isFinanceManagerRole } from '../constants/roles.js';
+import {
+  normalizeRole,
+  ROLES,
+  isFinanceManagerRole,
+  isSystemAdminRole,
+  canManageAllFinance,
+} from '../constants/roles.js';
 
 dotenv.config();
 
@@ -75,6 +81,12 @@ export const requireRole = (...roles) => {
     if (normalizeRole(req.user.role, req.user.degree) === ROLES.SUPER_ADMIN) {
       return next();
     }
+
+    // Admin may do whatever a super admin may on these routes. Finance writes
+    // use requireFinanceManager / requireFinanceWriter, which exclude admins.
+    if (isSystemAdminRole(req.user.role, req.user.degree) && roles.includes(ROLES.SUPER_ADMIN)) {
+      return next();
+    }
     
     // Use role mapper to check if user has any of the required roles
     // This automatically handles BOSS → ADMIN mapping
@@ -92,9 +104,33 @@ export const requireRole = (...roles) => {
   };
 };
 
+const FINANCE_READ_ONLY = 'Finance is read-only for the Admin role';
+
+/** Strictly the super admin (not admin): protected accounts, database backup / restore. */
+export const requireSuperAdmin = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json(createErrorResponse('AUTH_REQUIRED', 'Authentication required'));
+  }
+  if (normalizeRole(req.user.role, req.user.degree) === ROLES.SUPER_ADMIN) return next();
+  return res.status(403).json(createErrorResponse('INSUFFICIENT_PERMISSIONS', 'Only a Super Admin can do this'));
+};
+
+/** Finance changes that only super admin or finance manager may make (e.g. week periods). */
+export const requireFinanceWriter = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json(createErrorResponse('AUTH_REQUIRED', 'Authentication required'));
+  }
+  if (canManageAllFinance(req.user.role, req.user.degree)) return next();
+  return res.status(403).json(createErrorResponse(
+    'INSUFFICIENT_PERMISSIONS',
+    isSystemAdminRole(req.user.role, req.user.degree) ? FINANCE_READ_ONLY : 'Insufficient permissions'
+  ));
+};
+
 /**
  * Finance create/update/delete/approve: super admin, group boss (legacy ADMIN/BOSS /
- * TEAM_BOSS degree included) or finance manager.
+ * TEAM_BOSS degree included) or finance manager. Never the admin role: finance is
+ * read-only for them.
  */
 export const requireFinanceManager = (req, res, next) => {
   if (!req.user) {
@@ -102,6 +138,9 @@ export const requireFinanceManager = (req, res, next) => {
       'AUTH_REQUIRED',
       'Authentication required'
     ));
+  }
+  if (isSystemAdminRole(req.user.role, req.user.degree)) {
+    return res.status(403).json(createErrorResponse('INSUFFICIENT_PERMISSIONS', FINANCE_READ_ONLY));
   }
   if (hasAdminPrivileges(req.user) || isFinanceManagerRole(req.user.role, req.user.degree)) {
     return next();

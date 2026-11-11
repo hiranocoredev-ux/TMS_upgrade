@@ -1,17 +1,18 @@
-import { normalizeRole, ROLES, canManageAllFinance } from '../constants/roles.js';
+import { normalizeRole, ROLES, canViewAllFinance } from '../constants/roles.js';
 
 const META_GROUPS = ['SUPER_ADMIN', 'ADMIN'];
 
-/** Sees finance for every team: super admin or finance manager. */
+/** Sees finance for every team: super admin, finance manager or Admin (read-only). */
 export function isGlobalFinanceViewerUser(user) {
   if (!user) return false;
-  if (canManageAllFinance(user.role, user.degree)) return true;
+  if (canViewAllFinance(user.role, user.degree)) return true;
   return !!(user.group && META_GROUPS.includes(user.group));
 }
 
 /**
  * Matches server finance manager routes (super admin, group boss or finance
- * manager; legacy TEAM_BOSS degree maps to super admin).
+ * manager; legacy TEAM_BOSS degree maps to super admin). Admin (SYSTEM_ADMIN) is
+ * finance read-only, so this is false for them (gates finance write buttons).
  */
 export function isFinanceManagerUser(user) {
   if (!user) return false;

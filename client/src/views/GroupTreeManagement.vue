@@ -393,6 +393,7 @@ const applySelectedMemberGroup = async () => {
 
 const formatRole = (role) => {
   if (!role) return 'Member';
+  if (role === 'SYSTEM_ADMIN') return 'Admin';
   return role.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase());
 };
 

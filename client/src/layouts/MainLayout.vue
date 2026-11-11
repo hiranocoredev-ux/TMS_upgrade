@@ -340,7 +340,7 @@
         <!-- =====================
              DATABASE MANAGEMENT
         ====================== -->
-        <router-link v-if="isAdmin" :to="{ name: 'DatabaseManagement' }" class="nav-item">
+        <router-link v-if="isSuperAdmin" :to="{ name: 'DatabaseManagement' }" class="nav-item">
           <span class="group-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none">
               <ellipse cx="12" cy="6" rx="7" ry="3" stroke="currentColor" stroke-width="1.8"/>
@@ -446,7 +446,7 @@ import { useRoute } from 'vue-router';
 import { useAuthStore } from '../composables/useAuth';
 import { useThemeAppearance } from '../composables/useThemeAppearance';
 import { canViewAuditLogs, hasAnyRole } from '../utils/permissions';
-import { ROLES, LEGACY_ROLES, isFinanceManagerRole } from '../constants/roles';
+import { ROLES, LEGACY_ROLES, isFinanceManagerRole, isFullAdminRole } from '../constants/roles';
 import UserAvatar from '../components/UserAvatar.vue';
 import ReportNavSubmenu from '../components/navigation/ReportNavSubmenu.vue';
 import { getReportsByUser } from '../services/reports';
@@ -520,7 +520,12 @@ const Badge = () => {
   // alert(authStore.user.group)
 }
 
+/** Super admin or Admin (SYSTEM_ADMIN): every non-finance admin section. */
 const isAdmin = computed(() =>
+  isFullAdminRole(authStore.user?.role, authStore.user?.degree)
+);
+/** Super admin only (Database Management). */
+const isSuperAdmin = computed(() =>
   hasAnyRole(authStore.user, [ROLES.SUPER_ADMIN])
 );
 const isBoss = computed(() =>
@@ -570,7 +575,9 @@ const currentPageTitle = computed(
 );
 
 const formatRole = (role) =>
-  role
+  role === ROLES.SYSTEM_ADMIN
+    ? 'Admin'
+    : role
     ? role.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase())
     : '';
 

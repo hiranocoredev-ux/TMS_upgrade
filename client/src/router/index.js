@@ -6,6 +6,7 @@ import {
   LEGACY_ROLES,
   normalizeRole,
   isFinanceManagerRole,
+  isFullAdminRole,
   FINANCE_MANAGER_ROUTE_NAMES,
 } from '../constants/roles.js';
 
@@ -13,7 +14,7 @@ import {
  * Report RBAC is identical for daily, weekly, and monthly  only `reportPeriod` / URLs differ.
  * - Authors + personal history: group boss/member + legacy admin/member.
  * - Group team history: group boss + legacy boss/admin (not plain members).
- * - Cross-team “All … Reports”: super admin only.
+ * - Cross-team “All … Reports”: super admin and Admin (SYSTEM_ADMIN).
  */
 const REPORT_AUTHOR_AND_HISTORY_ROLES = [
   ROLES.GROUP_BOSS,
@@ -28,7 +29,7 @@ const REPORT_GROUP_TEAM_HISTORY_ROLES = [
   LEGACY_ROLES.BOSS,
 ];
 
-const REPORT_SUPER_ADMIN_ALL_TEAMS_ROLES = [ROLES.SUPER_ADMIN];
+const REPORT_SUPER_ADMIN_ALL_TEAMS_ROLES = [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN];
 
 const router = createRouter({
   history: createWebHistory(),
@@ -570,6 +571,8 @@ const router = createRouter({
           component: () => import('../views/DatabaseManagement.vue'),
           meta: {
             title: 'Database Management',
+            // Super admin only among the full admins: the Admin (SYSTEM_ADMIN) role is denied.
+            deniedForSystemAdmin: true,
             requiresRole: [ROLES.SUPER_ADMIN, ROLES.GROUP_BOSS, LEGACY_ROLES.ADMIN, LEGACY_ROLES.BOSS]
           }
         },
@@ -682,7 +685,7 @@ router.beforeEach((to, from, next) => {
     }
   }
 
-  // Super admin: blocked from author/group-team routes for daily, weekly, and monthly (redirect to matching "All …" page).
+  // Super admin / Admin: blocked from author/group-team routes for daily, weekly, and monthly (redirect to matching "All …" page).
   if (to.meta.deniedForSuperAdmin && isAuthenticated) {
     let user = store.state.auth.user;
     if (!user && hasUser) {
@@ -692,7 +695,7 @@ router.beforeEach((to, from, next) => {
         /* ignore */
       }
     }
-    if (user && normalizeRole(user.role, user.degree) === ROLES.SUPER_ADMIN) {
+    if (user && isFullAdminRole(user.role, user.degree)) {
       const period = to.meta.reportPeriod || 'daily';
       const isPlan = to.meta.documentKind === 'plan';
       const byPeriodReport = { daily: 'all', weekly: 'allWeekly', monthly: 'allMonthly' };
@@ -723,12 +726,17 @@ router.beforeEach((to, from, next) => {
       }
     }
 
-    // SUPER_ADMIN bypasses all role checks
+    // SUPER_ADMIN bypasses all role checks; Admin (SYSTEM_ADMIN) too, except routes flagged deniedForSystemAdmin.
     if (!user) {
       next('/forbidden');
       return;
     }
-    if (normalizeRole(user.role, user.degree) !== ROLES.SUPER_ADMIN && !hasAnyRole(user, requiredRoles)) {
+    const role = normalizeRole(user.role, user.degree);
+    if (role === ROLES.SYSTEM_ADMIN && to.meta.deniedForSystemAdmin) {
+      next('/forbidden');
+      return;
+    }
+    if (!isFullAdminRole(user.role, user.degree) && !hasAnyRole(user, requiredRoles)) {
       next('/forbidden');
       return;
     }

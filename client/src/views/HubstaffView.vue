@@ -354,6 +354,7 @@ const auth = useAuthStore();
 const isAdminOrBoss = computed(() =>
   hasAnyRole(auth.user, [
     ROLES.SUPER_ADMIN,
+    ROLES.SYSTEM_ADMIN,
     ROLES.GROUP_BOSS,
     LEGACY_ROLES.ADMIN,
     LEGACY_ROLES.BOSS,

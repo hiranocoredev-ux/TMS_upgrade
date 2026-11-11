@@ -22,7 +22,7 @@
 <script setup>
 import { computed } from 'vue';
 import { useAuthStore } from '../../composables/useAuth';
-import { normalizeRole, ROLES } from '../../constants/roles.js';
+import { normalizeRole, ROLES, isFullAdminRole } from '../../constants/roles.js';
 import ProfileRow from './ProfileRow.vue';
 
 defineProps({
@@ -40,7 +40,7 @@ const canCreate = computed(() => {
   if (!authStore.user) return false;
   const userRole = normalizeRole(authStore.user.role, authStore.user.degree);
   return (
-    userRole === ROLES.SUPER_ADMIN ||
+    isFullAdminRole(userRole) ||
     userRole === ROLES.GROUP_BOSS ||
     authStore.user.editor === true
   );

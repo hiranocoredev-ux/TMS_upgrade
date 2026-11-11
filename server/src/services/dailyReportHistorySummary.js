@@ -8,7 +8,7 @@ import CompetitionWorktimeUserDayRule from '../models/CompetitionWorktimeUserDay
 import FinanceTransaction from '../models/FinanceTransaction.js';
 import { withCountable } from '../utils/transactionReview.js';
 import MonthlyFinancialPlan from '../models/MonthlyFinancialPlan.js';
-import { normalizeRole, ROLES } from '../constants/roles.js';
+import { normalizeRole, ROLES, isFullAdminRole } from '../constants/roles.js';
 
 const DEFAULT_TARGET_MINUTES = 13 * 60 + 30;
 
@@ -91,7 +91,7 @@ export async function buildDailyReportHistorySummary(viewerUser, targetUserId, d
   }
 
   const viewerRole = normalizeRole(viewerUser?.role, viewerUser?.degree);
-  const isSuperAdmin = viewerRole === ROLES.SUPER_ADMIN;
+  const isSuperAdmin = isFullAdminRole(viewerRole);
   const viewerGroup = viewerUser?.group;
 
   if (!isSuperAdmin) {

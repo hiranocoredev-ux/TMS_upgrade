@@ -360,7 +360,7 @@ import { ROLES } from '../../constants/roles';
 
 const auth = useAuthStore();
 const canEdit = computed(() =>
-  hasAnyRole(auth.user, [ROLES.SUPER_ADMIN])
+  hasAnyRole(auth.user, [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN])
 );
 
 const rules = ref([]);

@@ -226,7 +226,7 @@ const isAdminUser = computed(() => {
   const u = authStore.user;
   if (!u?.role) return false;
   const r = normalizeRole(u.role, u.degree);
-  return r === ROLES.SUPER_ADMIN || r === ROLES.GROUP_BOSS;
+  return r === ROLES.SUPER_ADMIN || r === ROLES.SYSTEM_ADMIN || r === ROLES.GROUP_BOSS;
 });
 
 const loadAssignments = async () => {

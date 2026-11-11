@@ -1,14 +1,17 @@
-import { ROLES, normalizeRole, isSuperAdminRole, canManageAllFinance } from "../constants/roles.js";
+import { ROLES, normalizeRole, isSuperAdminRole, canViewAllFinance } from "../constants/roles.js";
 import { hasAdminPrivileges } from "./roleMapper.js";
 import User from "../models/User.js";
 
 /** Groups that can see/edit finance across all teams */
 export const FINANCE_META_GROUPS = new Set(["SUPER_ADMIN", "ADMIN"]);
 
-/** Sees (and, through requireFinanceManager, edits) finance for every team. */
+/**
+ * Sees finance for every team: super admin, finance manager, admin. Edits go
+ * through requireFinanceManager, which excludes admin (read-only).
+ */
 export function isGlobalFinanceViewer(user) {
   if (!user) return false;
-  if (canManageAllFinance(user.role, user.degree)) return true;
+  if (canViewAllFinance(user.role, user.degree)) return true;
   const g = user.group;
   return !!(g && FINANCE_META_GROUPS.has(g));
 }

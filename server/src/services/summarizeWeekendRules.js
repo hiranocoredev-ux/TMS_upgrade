@@ -16,6 +16,7 @@ import {
   WEEKEND_RULE_THRESHOLD_PERCENT,
 } from '../constants/summarize.js';
 import { getESTDateKey } from '../utils/estTime.js';
+import { NON_MEMBER_ROLES } from '../constants/roles.js';
 
 /**
  * The weekend rule: a member whose weekly Summarize Total came in under
@@ -58,7 +59,7 @@ export const findLastFinishedPeriod = async (now = new Date()) => {
  */
 export const weeklyMemberTotals = async (period) => {
   const periodId = period._id;
-  const userQuery = { role: { $ne: 'SUPER_ADMIN' }, group: { $nin: ['SUPER_ADMIN', 'ADMIN', null, ''] } };
+  const userQuery = { role: { $nin: NON_MEMBER_ROLES }, group: { $nin: ['SUPER_ADMIN', 'ADMIN', null, ''] } };
   const [users, groups] = await Promise.all([
     User.find(userQuery).select('_id name email role group status avatarUrl').lean(),
     Group.find().select('code name sortOrder type').lean(),

@@ -257,7 +257,7 @@ function pickBestReport(candidates) {
 
 function rosterUsersEligible(u) {
   if (!u || u.status === 'disabled') return false;
-  if ((u.role || '') === 'SUPER_ADMIN') return false;
+  if (['SUPER_ADMIN', 'SYSTEM_ADMIN', 'FINANCE_MANAGER'].includes(u.role || '')) return false;
   return true;
 }
 

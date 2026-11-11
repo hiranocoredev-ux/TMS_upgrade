@@ -22,8 +22,9 @@ const router = express.Router();
 const isRequesterSuperAdmin = (req) => normalizeRole(req.user.role, req.user.degree) === ROLES.SUPER_ADMIN;
 
 /**
- * Super admin and finance manager accounts belong to no group, and only a super
- * admin may create, assign, edit, reset or delete them.
+ * Super admin, admin and finance manager accounts belong to no group, and only a
+ * super admin may create, assign, edit, reset or delete them. (An admin manages
+ * group bosses, members and groups.)
  */
 const isProtectedRole = (role, degree) => NON_MEMBER_ROLES.includes(normalizeRole(role, degree));
 
@@ -162,6 +163,7 @@ const hubstaffIdField = z
 
 const roleField = z.enum([
   'SUPER_ADMIN',
+  'SYSTEM_ADMIN',
   'GROUP_BOSS',
   'GROUP_MEMBER',
   'FINANCE_MANAGER',
@@ -293,7 +295,7 @@ router.post('/users', async (req, res, next) => {
     if (isProtectedRole(canonicalRole) && !isRequesterSuperAdmin(req)) {
       return res.status(403).json(createErrorResponse(
         'INSUFFICIENT_PERMISSIONS',
-        'Only SUPER_ADMIN can create Super Admin or Finance Manager users',
+        'Only SUPER_ADMIN can create Super Admin, Admin or Finance Manager users',
         403
       ));
     }
@@ -423,7 +425,7 @@ router.put('/users/:id', async (req, res, next) => {
     if (isProtectedRole(user.role, user.degree) && !isRequesterSuperAdmin(req)) {
       return res.status(403).json(createErrorResponse(
         'INSUFFICIENT_PERMISSIONS',
-        'Cannot modify Super Admin or Finance Manager users',
+        'Cannot modify Super Admin, Admin or Finance Manager users',
         403
       ));
     }
@@ -432,7 +434,7 @@ router.put('/users/:id', async (req, res, next) => {
     if (validatedData.role !== undefined && isProtectedRole(validatedData.role) && !isRequesterSuperAdmin(req)) {
       return res.status(403).json(createErrorResponse(
         'INSUFFICIENT_PERMISSIONS',
-        'Only SUPER_ADMIN can assign the Super Admin or Finance Manager role',
+        'Only SUPER_ADMIN can assign the Super Admin, Admin or Finance Manager role',
         403
       ));
     }
@@ -604,7 +606,7 @@ router.post('/users/:id/reset-password', async (req, res, next) => {
     if (isProtectedRole(user.role, user.degree) && !isRequesterSuperAdmin(req)) {
       return res.status(403).json(createErrorResponse(
         'INSUFFICIENT_PERMISSIONS',
-        'Cannot reset a Super Admin or Finance Manager password',
+        'Cannot reset a Super Admin, Admin or Finance Manager password',
         403
       ));
     }
@@ -658,7 +660,7 @@ router.delete('/users/:id', async (req, res, next) => {
     if (isProtectedRole(user.role, user.degree) && !isRequesterSuperAdmin(req)) {
       return res.status(403).json(createErrorResponse(
         'INSUFFICIENT_PERMISSIONS',
-        'Cannot delete a Super Admin or Finance Manager user',
+        'Cannot delete a Super Admin, Admin or Finance Manager user',
         403
       ));
     }

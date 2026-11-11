@@ -6,7 +6,8 @@ import { createModuleUpload, VALID_MODULES } from '../middleware/upload.middlewa
 import FileMeta from '../models/FileMeta.js';
 import { createErrorResponse, createSuccessResponse } from '../utils/errors.js';
 import { log as auditLog, getRequestMeta } from '../utils/audit.js';
-import { hasAdminPrivileges, ROLES } from '../utils/roleMapper.js';
+import { hasAdminPrivileges } from '../utils/roleMapper.js';
+import { isFullAdminRole } from '../constants/roles.js';
 import User from '../models/User.js';
 
 const router = express.Router();
@@ -127,9 +128,9 @@ const checkDownloadAccess = async (req, fileMeta) => {
     : fileMeta.uploadedByUserId.toString();
   const userId = user._id.toString();
 
-  // Personal profiles: only owner (SUPER_ADMIN can access all)
+  // Personal profiles: only owner (SUPER_ADMIN / SYSTEM_ADMIN can access all)
   if (fileMeta.module === 'personal_profiles') {
-    if (user.role === ROLES.SUPER_ADMIN) {
+    if (isFullAdminRole(user.role, user.degree)) {
       return true;
     }
     return uploadedByUserId === userId;
@@ -137,7 +138,7 @@ const checkDownloadAccess = async (req, fileMeta) => {
 
       // Freelancer accounts: SUPER_ADMIN/ADMIN only (no owner access for members)
       if (fileMeta.module === 'freelancer_accounts') {
-        return user.role === ROLES.SUPER_ADMIN || hasAdminPrivileges(user);
+        return isFullAdminRole(user.role, user.degree) || hasAdminPrivileges(user);
       }
 
       // Other modules: owner, SUPER_ADMIN, or ADMIN can access
@@ -155,8 +156,8 @@ const checkDownloadAccess = async (req, fileMeta) => {
         if (uploadedByUserId === userId) {
           return true;
         }
-        // SUPER_ADMIN and ADMIN (including legacy BOSS) can access
-        if (user.role === ROLES.SUPER_ADMIN || hasAdminPrivileges(user)) {
+        // SUPER_ADMIN, SYSTEM_ADMIN and ADMIN (including legacy BOSS) can access
+        if (isFullAdminRole(user.role, user.degree) || hasAdminPrivileges(user)) {
           return true;
         }
     // TODO: Check assignee/entity ownership when entities are implemented

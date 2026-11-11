@@ -7,13 +7,13 @@
  * - Owners see everything
  * - ADMIN can see everything (team oversight)
  * - Others see masked version of sensitive fields
- * - SUPER_ADMIN always sees everything
+ * - SUPER_ADMIN and SYSTEM_ADMIN ("Admin") always see everything
  * 
  * Usage:
  * const sanitized = sanitizeForRequester(user, entity, entityType);
  */
 
-import { ROLES } from '../constants/roles.js';
+import { isFullAdminRole } from '../constants/roles.js';
 import { isOwner } from './permissions.js';
 import { hasAdminPrivileges, canUserOverrideOwnership } from './roleMapper.js';
 
@@ -104,8 +104,8 @@ export const maskIdNumber = (idNumber) => {
 export const shouldShowUnmasked = (user, entity) => {
   if (!user || !entity) return false;
   
-  // SUPER_ADMIN always sees everything
-  if (user.role === ROLES.SUPER_ADMIN || canUserOverrideOwnership(user)) {
+  // SUPER_ADMIN / SYSTEM_ADMIN always see everything
+  if (isFullAdminRole(user.role, user.degree) || canUserOverrideOwnership(user)) {
     return true;
   }
   

@@ -82,8 +82,8 @@
             <td>{{ formatDate(user.createdAt) }}</td>
             <td>
               <div class="action-buttons">
-                <button type="button" @click="openEditModal(user)" class="btn-edit">Edit</button>
-                <button type="button" @click="handleResetPassword(user)" class="btn-reset">Reset Password</button>
+                <button v-if="canManageUser(user)" type="button" @click="openEditModal(user)" class="btn-edit">Edit</button>
+                <button v-if="canManageUser(user)" type="button" @click="handleResetPassword(user)" class="btn-reset">Reset Password</button>
                 <button
                   v-if="canDeleteUser(user)"
                   type="button"
@@ -138,10 +138,15 @@
                   <option value="GROUP_MEMBER">Member</option>
                   <option value="GROUP_BOSS">Group Boss</option>
                   <option v-if="isSuperAdmin" value="FINANCE_MANAGER">Finance Manager</option>
+                  <option v-if="isSuperAdmin" value="SYSTEM_ADMIN">Admin</option>
                   <option v-if="isSuperAdmin" value="SUPER_ADMIN">Super Admin</option>
                 </select>
                 <small v-if="form.role === 'FINANCE_MANAGER'" class="form-hint">
                   Full control of Finance for every team, plus read-only Summarize. No group.
+                </small>
+                <small v-if="form.role === 'SYSTEM_ADMIN'" class="form-hint">
+                  Everything a Super Admin can do outside Finance (except Database Management);
+                  Finance is read-only for every team. No group.
                 </small>
               </div>
               <div v-if="!isFormSuperAdmin" class="form-group">
@@ -407,7 +412,7 @@ const error = ref(null);
 const users = ref([]);
 
 /**
- * Super admins first, then finance managers, then groups in directory order
+ * Super admins first, then Admins, then finance managers, then groups in directory order
  * (sortOrder): boss, then members; unknown groups after.
  */
 const sortedUsers = computed(() => {
@@ -419,9 +424,11 @@ const sortedUsers = computed(() => {
     String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base', numeric: true });
 
   const superAdmins = list.filter((u) => canon(u) === ROLES.SUPER_ADMIN);
+  const systemAdmins = list.filter((u) => canon(u) === ROLES.SYSTEM_ADMIN);
   const financeManagers = list.filter((u) => canon(u) === ROLES.FINANCE_MANAGER);
   const others = list.filter((u) => !GROUPLESS_ROLES.includes(canon(u)));
   superAdmins.sort(nameCmp);
+  systemAdmins.sort(nameCmp);
   financeManagers.sort(nameCmp);
 
   const groupsByOrder = [...groups.value].sort((a, b) => {
@@ -469,7 +476,7 @@ const sortedUsers = computed(() => {
   });
   orderedKeys.push(...leftovers);
 
-  const out = [...superAdmins, ...financeManagers];
+  const out = [...superAdmins, ...systemAdmins, ...financeManagers];
   for (const key of orderedKeys) {
     out.push(...(byGroup.get(key) || []));
   }
@@ -501,16 +508,24 @@ const deleteErrorMessage = ref('');
 const isSuperAdmin = computed(
   () => normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SUPER_ADMIN
 );
-/** Super admin or finance manager in the form: no group and no working role. */
+/** Super admin, Admin or finance manager in the form: no group and no working role. */
 const isFormSuperAdmin = computed(() => GROUPLESS_ROLES.includes(form.value.role));
+
+/**
+ * Super admin, Admin and finance manager accounts are protected: only a super admin may
+ * edit / reset / delete them (the server enforces the same). An Admin manages bosses & members only.
+ */
+const canManageUser = (user) => {
+  if (!user) return false;
+  if (GROUPLESS_ROLES.includes(normalizeRole(user.role, user.degree)) && !isSuperAdmin.value) return false;
+  return true;
+};
 
 const canDeleteUser = (user) => {
   const selfId = authStore.user?.id;
   if (!selfId || !user?.id) return false;
   if (String(user.id) === String(selfId)) return false;
-  // Only a super admin may delete super admins and finance managers (the server enforces the same).
-  if (GROUPLESS_ROLES.includes(user.role) && !isSuperAdmin.value) return false;
-  return true;
+  return canManageUser(user);
 };
 
 // Group management (super admin only)
@@ -790,6 +805,7 @@ const executeResetPassword = async () => {
 };
 
 const formatRole = (role) => {
+  if (role === ROLES.SYSTEM_ADMIN) return 'Admin';
   return role.replace('_', ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
 };
 
@@ -1083,6 +1099,12 @@ const deleteGroup = async (group) => {
   background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(124, 58, 237, 0.2) 100%);
   color: var(--color-secondary);
   border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+.role-system_admin {
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.18) 0%, rgba(219, 39, 119, 0.18) 100%);
+  color: #be185d;
+  border: 1px solid rgba(236, 72, 153, 0.3);
 }
 
 .role-finance_manager {

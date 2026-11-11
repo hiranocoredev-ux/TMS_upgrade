@@ -4,7 +4,7 @@
  * PRD v3.0 Permission Philosophy:
  * - Ownership is the primary access control
  * - Roles grant additional permissions beyond ownership
- * - SUPER_ADMIN bypasses all checks
+ * - SUPER_ADMIN and SYSTEM_ADMIN ("Admin") bypass all checks
  * 
  * Usage Pattern:
  * 1. Check if user is owner → if yes, grant access
@@ -13,7 +13,7 @@
  * 4. Otherwise, deny access
  */
 
-import { ROLES } from '../constants/roles.js';
+import { ROLES, isFullAdminRole } from '../constants/roles.js';
 import { hasAdminPrivileges, canUserOverrideOwnership, normalizeRole } from './roleMapper.js';
 
 /**
@@ -47,8 +47,8 @@ export const isOwner = (user, entity, ownerField = 'ownerUserId') => {
 export const canView = (user, entity, options = {}) => {
   if (!user || !entity) return false;
   
-  // SUPER_ADMIN can view everything
-  if (user.role === ROLES.SUPER_ADMIN || canUserOverrideOwnership(user)) {
+  // SUPER_ADMIN / SYSTEM_ADMIN can view everything
+  if (isFullAdminRole(user.role, user.degree) || canUserOverrideOwnership(user)) {
     return true;
   }
   
@@ -101,8 +101,8 @@ export const canEdit = (user, entity, options = {}) => {
     return { canEdit: false, reason: 'User or entity not provided' };
   }
   
-  // SUPER_ADMIN can edit everything
-  if (user.role === ROLES.SUPER_ADMIN || canUserOverrideOwnership(user)) {
+  // SUPER_ADMIN / SYSTEM_ADMIN can edit everything
+  if (isFullAdminRole(user.role, user.degree) || canUserOverrideOwnership(user)) {
     return { canEdit: true };
   }
   
@@ -142,8 +142,8 @@ export const canEdit = (user, entity, options = {}) => {
 export const canDelete = (user, entity, options = {}) => {
   if (!user || !entity) return false;
   
-  // SUPER_ADMIN can delete everything (except other SUPER_ADMIN users)
-  if (user.role === ROLES.SUPER_ADMIN || canUserOverrideOwnership(user)) {
+  // SUPER_ADMIN / SYSTEM_ADMIN can delete everything (except other SUPER_ADMIN users)
+  if (isFullAdminRole(user.role, user.degree) || canUserOverrideOwnership(user)) {
     return true;
   }
   
@@ -186,8 +186,8 @@ export const canDelete = (user, entity, options = {}) => {
 export const canCreate = (user, options = {}) => {
   if (!user) return false;
   
-  // SUPER_ADMIN can create everything
-  if (user.role === ROLES.SUPER_ADMIN || canUserOverrideOwnership(user)) {
+  // SUPER_ADMIN / SYSTEM_ADMIN can create everything
+  if (isFullAdminRole(user.role, user.degree) || canUserOverrideOwnership(user)) {
     return true;
   }
   

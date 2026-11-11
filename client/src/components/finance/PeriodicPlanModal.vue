@@ -52,7 +52,7 @@
           </div>
           <div class="form-actions">
             <button type="button" @click="close" class="btn-cancel">Cancel</button>
-            <button type="submit" class="btn-primary" :disabled="saving">
+            <button v-if="!isReadOnlyAdmin" type="submit" class="btn-primary" :disabled="saving">
               {{ saving ? 'Saving...' : 'Save' }}
             </button>
           </div>
@@ -67,7 +67,7 @@ import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import { useFinance } from '../../composables/useFinance';
 import { fetchUsers } from '../../services/users';
 import { useAuthStore } from '../../composables/useAuth';
-import { canManageAllFinance } from '../../constants/roles';
+import { canManageAllFinance, isSystemAdminRole } from '../../constants/roles';
 import { excludeSuperAdmin } from '../../utils/userFilters';
 import { formatDate } from '../../utils/financeHelpers';
 import ReportRichEditor from '../reports/ReportRichEditor.vue';
@@ -138,6 +138,8 @@ const close = () => {
 
 const save = async () => {
   if (saving.value) return;
+  // Admin (SYSTEM_ADMIN) is finance read-only: never creates or edits week plans.
+  if (isReadOnlyAdmin.value) return;
 
   if (!formData.value.periodId) {
     alert('Period is required');
@@ -186,6 +188,8 @@ const save = async () => {
 const authStore = useAuthStore();
 /** Super admin or finance manager: may plan for every team. */
 const isSuperAdmin = computed(() => canManageAllFinance(authStore.user?.role, authStore.user?.degree));
+/** Admin (SYSTEM_ADMIN): finance read-only, so the modal never saves. */
+const isReadOnlyAdmin = computed(() => isSystemAdminRole(authStore.user?.role, authStore.user?.degree));
 
 /**
  * Users the viewer may plan for: super admin / finance manager -> every user,

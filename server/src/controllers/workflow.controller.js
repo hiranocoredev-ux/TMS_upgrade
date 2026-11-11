@@ -766,7 +766,7 @@ export const getWorktimeHubstaffUsers = async (req, res) => {
         hubstaffId: u.hubstaff_id || '',
         hasHubstaffId: !!u.hubstaff_id,
       }))
-      .filter((u) => u.role !== ROLES.SUPER_ADMIN)
+      .filter((u) => !isNonMemberRole(u.role))
       .sort((a, b) => {
         const g1 = a.group || 'No Group';
         const g2 = b.group || 'No Group';
@@ -792,8 +792,8 @@ export const upsertWorktimeHubstaffId = async (req, res) => {
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ ok: false, message: 'User not found' });
-    if (normalizeRole(user.role, user.degree) === ROLES.SUPER_ADMIN) {
-      return res.status(400).json({ ok: false, message: 'Cannot set Hubstaff ID for super admin' });
+    if (isNonMemberRole(user.role, user.degree)) {
+      return res.status(400).json({ ok: false, message: 'Cannot set Hubstaff ID for super admin, admin or finance manager' });
     }
 
     user.hubstaff_id = normalized || null;

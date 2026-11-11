@@ -5,6 +5,7 @@ import { DEFAULT_ENTITY_GROUP, ENTITY_GROUP_VALUES } from '../constants/groups.j
 import { encrypt, decrypt } from '../utils/encryption.js';
 import { log as auditLog, getRequestMeta } from '../utils/audit.js';
 import { normalizeRole, ROLES } from '../utils/roleMapper.js';
+import { isFullAdminRole } from '../constants/roles.js';
 import { freelancerAccountPermissions } from '../utils/permissions/entityPermissions.js';
 import { sanitizeFreelancerAccount } from '../utils/sanitizer.js';
 import { createModuleUpload } from '../middleware/upload.middleware.js';
@@ -52,7 +53,7 @@ export const listFreelancerAccounts = async (req, res, next) => {
     const { status, search, page = 1, limit = 20 } = req.query;
     const role = normalizeRole(req.user.role);
 
-    if (![ROLES.ADMIN, ROLES.SUPER_ADMIN, ROLES.BOSS].includes(role)) {
+    if (![ROLES.ADMIN, ROLES.BOSS].includes(role) && !isFullAdminRole(role)) {
       return res.status(403).json(createErrorResponse('ACCESS_DENIED', 'No permission', 403));
     }
 

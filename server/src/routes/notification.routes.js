@@ -4,7 +4,7 @@ import { requireAuth } from '../middleware/auth.middleware.js';
 import NotificationSettings from '../models/NotificationSettings.js';
 import NotificationDispatchLog from '../models/NotificationDispatchLog.js';
 import User from '../models/User.js';
-import { normalizeRole, ROLES } from '../constants/roles.js';
+import { normalizeRole, ROLES, isFullAdminRole, isNonMemberRole } from '../constants/roles.js';
 import {
   getOrCreateNotificationSettings,
   runScheduledNotificationTick,
@@ -51,7 +51,8 @@ const manualSchema = z.object({
   message: z.string().min(1).max(5000),
 });
 
-const isSuperAdmin = (user) => normalizeRole(user?.role, user?.degree) === ROLES.SUPER_ADMIN;
+// Super admin or admin
+const isSuperAdmin = (user) => isFullAdminRole(user?.role, user?.degree);
 const isGroupBoss = (user) => normalizeRole(user?.role, user?.degree) === ROLES.GROUP_BOSS;
 
 router.get('/notifications/settings', requireAuth, async (req, res, next) => {
@@ -69,7 +70,7 @@ router.get('/notifications/settings', requireAuth, async (req, res, next) => {
         settings,
         groups,
         users: users
-          .filter((u) => normalizeRole(u.role, u.degree) !== ROLES.SUPER_ADMIN)
+          .filter((u) => !isNonMemberRole(u.role, u.degree))
           .map((u) => {
             const roleNormalized = normalizeRole(u.role, u.degree);
             const n = u.notification || {};
@@ -106,7 +107,7 @@ router.get('/notifications/settings', requireAuth, async (req, res, next) => {
 
 router.put('/notifications/settings', requireAuth, async (req, res, next) => {
   try {
-    if (!isSuperAdmin(req.user)) return res.status(403).json({ ok: false, message: 'Only super admin can edit notification settings' });
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ ok: false, message: 'Only super admin or admin can edit notification settings' });
     const payload = settingsSchema.parse(req.body);
     const settings = await getOrCreateNotificationSettings();
     settings.ipMessage = payload.ipMessage;
@@ -131,7 +132,7 @@ router.post('/notifications/manual', requireAuth, async (req, res, next) => {
     // Group targeting is restricted to super admin / group boss.
     if (payload.targetType === 'groups') {
       if (!isSuperAdmin(req.user) && !isGroupBoss(req.user)) {
-        return res.status(403).json({ ok: false, message: 'Group message is allowed only for super admin or group boss' });
+        return res.status(403).json({ ok: false, message: 'Group message is allowed only for super admin, admin or group boss' });
       }
       if (isGroupBoss(req.user) && !isSuperAdmin(req.user)) {
         const myGroup = String(req.user.group || '').trim();
@@ -185,7 +186,7 @@ router.get('/messages/targets', requireAuth, async (req, res, next) => {
 
 router.post('/notifications/run-now', requireAuth, async (req, res, next) => {
   try {
-    if (!isSuperAdmin(req.user)) return res.status(403).json({ ok: false, message: 'Only super admin can run notification checks' });
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ ok: false, message: 'Only super admin or admin can run notification checks' });
     await runScheduledNotificationTick();
     res.json({ ok: true, message: 'Notification checks executed' });
   } catch (err) {
@@ -195,7 +196,7 @@ router.post('/notifications/run-now', requireAuth, async (req, res, next) => {
 
 router.post('/notifications/test-user', requireAuth, async (req, res, next) => {
   try {
-    if (!isSuperAdmin(req.user)) return res.status(403).json({ ok: false, message: 'Only super admin can test users' });
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ ok: false, message: 'Only super admin or admin can test users' });
     const userId = String(req.body?.userId || '').trim();
     if (!userId) return res.status(400).json({ ok: false, message: 'userId is required' });
     const out = await sendUserConnectionTestByAdmin({ actor: req.user, userId });
@@ -208,7 +209,7 @@ router.post('/notifications/test-user', requireAuth, async (req, res, next) => {
 
 router.get('/notifications/logs', requireAuth, async (req, res, next) => {
   try {
-    if (!isSuperAdmin(req.user)) return res.status(403).json({ ok: false, message: 'Only super admin can view logs' });
+    if (!isSuperAdmin(req.user)) return res.status(403).json({ ok: false, message: 'Only super admin or admin can view logs' });
     const limit = Math.min(200, Math.max(1, Number(req.query.limit || 100)));
     const rows = await NotificationDispatchLog.find({})
       .sort({ createdAt: -1 })

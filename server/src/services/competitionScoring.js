@@ -8,7 +8,7 @@ import WorktimeTarget from '../models/WorktimeTarget.js';
 import CompetitionAdjustment from '../models/CompetitionAdjustment.js';
 import CompetitionWorktimeDayRule from '../models/CompetitionWorktimeDayRule.js';
 import CompetitionWorktimeUserDayRule from '../models/CompetitionWorktimeUserDayRule.js';
-import { normalizeRole, ROLES } from '../constants/roles.js';
+import { isNonMemberRole } from '../constants/roles.js';
 import {
   estDateKeyToUtcDate,
   getESTDateKey,
@@ -89,13 +89,13 @@ function monthUtcBounds(monthKey) {
   return { startUtc, endUtc };
 }
 
-/** Competition participants (excludes SUPER_ADMIN). */
+/** Competition participants (excludes non-member roles: super admin, admin, finance manager). */
 export async function loadParticipantUsers() {
   const users = await User.find({})
     .select('name email group hubstaff_id avatarUrl role degree')
     .sort({ group: 1, name: 1 })
     .lean();
-  return users.filter((u) => normalizeRole(u.role, u.degree) !== ROLES.SUPER_ADMIN);
+  return users.filter((u) => !isNonMemberRole(u.role, u.degree));
 }
 
 function safeNumber(n, fallback = 0) {

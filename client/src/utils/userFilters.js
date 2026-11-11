@@ -1,6 +1,6 @@
 /**
  * User filtering utilities
- * Excludes super admin and finance manager (no group, not team members) from
+ * Excludes super admin, Admin and finance manager (no group, not team members) from
  * member lists and calculations
  */
 

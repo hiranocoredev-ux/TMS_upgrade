@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import Daily from "../models/Daily.js";
 import Weekly from "../models/Weekly.js";
 import Monthly from "../models/Monthly.js";
-import { normalizeRole, ROLES } from "../constants/roles.js";
+import { normalizeRole, ROLES, isFullAdminRole } from "../constants/roles.js";
 import {
     getESTDateKey,
     getESTMonthStartKey,
@@ -152,7 +152,7 @@ export const getAllReports = async (req, res) => {
 
     try {
         const effective = normalizeRole(req.user?.role, req.user?.degree);
-        const base = effective === ROLES.SUPER_ADMIN ? {} : { group };
+        const base = isFullAdminRole(effective) ? {} : { group };
 
         const reports = await Model.find(listFilterForKind(kind, base)).sort({ date: -1 });
         res.status(200).json(reports);
@@ -169,7 +169,7 @@ export const getTeamReports = async (req, res) => {
 
     try {
         const effective = normalizeRole(req.user?.role, req.user?.degree);
-        if (effective !== ROLES.SUPER_ADMIN && groupID !== req.user?.group) {
+        if (!isFullAdminRole(effective) && groupID !== req.user?.group) {
             return res.status(403).json({ message: 'You can only view your own team\'s reports' });
         }
 
@@ -192,11 +192,11 @@ export const updateReport = async (req, res) => {
     try {
         const isSelfReport = String(userId) === String(user?._id || '');
         const effective = normalizeRole(user?.role, user?.degree);
-        const isLeader = effective === ROLES.SUPER_ADMIN || effective === ROLES.GROUP_BOSS;
+        const isLeader = isFullAdminRole(effective) || effective === ROLES.GROUP_BOSS;
         const normalizedDate = normalizeReportDateByPeriodEST(date, period);
         const trimmedRejectReason = String(rejectReason || '').trim();
         const nextIsRejected = [3, 4].includes(Number(state));
-        if (effective !== ROLES.SUPER_ADMIN && group !== user?.group) {
+        if (!isFullAdminRole(effective) && group !== user?.group) {
             return res.status(403).json({ message: 'You can only edit your own group\'s reports' });
         }
         if (nextIsRejected) {
@@ -341,7 +341,7 @@ export const deleteReport = async (req, res) => {
     if (!report) return res.status(404).json({ message: 'Report not found' });
 
     const effective = normalizeRole(user?.role, user?.degree);
-    if (effective !== ROLES.SUPER_ADMIN && report.group !== user?.group) {
+    if (!isFullAdminRole(effective) && report.group !== user?.group) {
         return res.status(403).json({ message: 'You can only delete your own group\'s reports' });
     }
 

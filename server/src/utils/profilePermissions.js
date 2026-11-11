@@ -4,7 +4,7 @@
  * Centralized permission checking for JobProfile, FreelancerProfile, and PersonalProfile
  */
 
-import { normalizeRole, ROLES } from '../constants/roles.js';
+import { normalizeRole, ROLES, isFullAdminRole } from '../constants/roles.js';
 
 const isOwner = (user, profile) => {
   if (!user || !profile) return false;
@@ -15,7 +15,7 @@ const isOwner = (user, profile) => {
 const isGroupBossOrSuper = (user) => {
   if (!user?.role) return false;
   const r = normalizeRole(user.role, user.degree);
-  return r === ROLES.GROUP_BOSS || r === ROLES.SUPER_ADMIN;
+  return r === ROLES.GROUP_BOSS || isFullAdminRole(r);
 };
 
 export const canViewJobProfile = (user, profile) => {

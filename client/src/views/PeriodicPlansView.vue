@@ -27,6 +27,9 @@
         <router-link v-if="canEdit" class="wp-btn wp-btn--primary" :to="{ name: 'WeeklyPlansManage' }">
           Manage weeks
         </router-link>
+        <router-link v-else-if="isReadOnlyAdmin" class="wp-btn" :to="{ name: 'WeeklyPlansManage' }">
+          View weeks
+        </router-link>
         <button type="button" class="wp-btn" :disabled="loading" @click="load">
           {{ loading ? 'Loading…' : 'Refresh' }}
         </button>
@@ -149,6 +152,8 @@ import TmsNativeCalendarField from '../components/ui/TmsNativeCalendarField.vue'
 import PeriodicPlanModal from '../components/finance/PeriodicPlanModal.vue';
 import { fetchPeriodicPlanMatrix, getPeriodicPlan } from '../services/finance';
 import { getESTMonthKey } from '../utils/timezoneHelpers';
+import { useAuthStore } from '../composables/useAuth';
+import { isSystemAdminRole } from '../constants/roles';
 
 const ACCENTS = ['#2563eb', '#ea580c', '#059669', '#7c3aed', '#db2777', '#0891b2'];
 
@@ -161,6 +166,9 @@ const periods = ref([]);
 const cells = ref([]);
 const monthlyGoals = ref([]);
 const canEdit = ref(false);
+const authStore = useAuthStore();
+/** Admin (SYSTEM_ADMIN): finance read-only, may still open the weeks page to view. */
+const isReadOnlyAdmin = computed(() => isSystemAdminRole(authStore.user?.role, authStore.user?.degree));
 /** null = every team, a code = that team only, '' = nothing. */
 const editableGroup = ref(null);
 const loading = ref(false);

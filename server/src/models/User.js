@@ -39,6 +39,7 @@ const userSchema = new mongoose.Schema({
       'GROUP_BOSS',
       'GROUP_MEMBER',
       'FINANCE_MANAGER',
+      'SYSTEM_ADMIN',
       'ADMIN',
       'BOSS',
       'MEMBER',

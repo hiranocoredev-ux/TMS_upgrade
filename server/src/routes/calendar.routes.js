@@ -4,6 +4,7 @@ import Interview from '../models/Interview.js';
 import JobTicket from '../models/JobTicket.js';
 import { createErrorResponse, createSuccessResponse } from '../utils/errors.js';
 import { hasAdminPrivileges, ROLES, normalizeRole } from '../utils/roleMapper.js';
+import { isFullAdminRole } from '../constants/roles.js';
 
 const router = express.Router();
 
@@ -17,8 +18,8 @@ const buildInterviewQuery = async (user, filters = {}) => {
 
   // Apply additional filters
   if (filters.memberId) {
-    // For SUPER_ADMIN/ADMIN (including legacy BOSS), allow filtering by member
-    if (user.role === ROLES.SUPER_ADMIN || hasAdminPrivileges(user)) {
+    // For SUPER_ADMIN/SYSTEM_ADMIN/ADMIN (including legacy BOSS), allow filtering by member
+    if (isFullAdminRole(user.role, user.degree) || hasAdminPrivileges(user)) {
       query.createdByUserId = filters.memberId;
     }
   }

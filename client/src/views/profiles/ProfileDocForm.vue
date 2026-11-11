@@ -1503,7 +1503,7 @@ const loadProfile = async () => {
 const bootstrapCreateMode = () => {
   const user = authStore.user;
   if (!user) return;
-  const isAdmin = user.role === 'SUPER_ADMIN' || user.role === 'GROUP_BOSS' || user.degree === 'ADMIN' || user.degree === 'TEAM_BOSS';
+  const isAdmin = user.role === 'SUPER_ADMIN' || user.role === 'SYSTEM_ADMIN' || user.role === 'GROUP_BOSS' || user.degree === 'ADMIN' || user.degree === 'TEAM_BOSS';
   const isHunter = Array.isArray(user.workingRoles) && user.workingRoles.includes('hunting_profile');
   const triad = isAdmin || isHunter;
   permissions.value = {
@@ -1514,7 +1514,7 @@ const bootstrapCreateMode = () => {
     canEditContract: triad,
     canViewContact: triad,
     canViewContract: triad,
-    canManageTransactions: isAdmin,         // GROUP_BOSS / SUPER_ADMIN
+    canManageTransactions: isAdmin,         // GROUP_BOSS / SUPER_ADMIN / SYSTEM_ADMIN
     tabs: {},
   };
   // A hunter creating a profile owns it by default; admins pick an owner explicitly.

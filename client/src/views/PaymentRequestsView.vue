@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue';
 import { useToast } from 'vue-toastification';
 import { useAuthStore } from '../composables/useAuth';
-import { normalizeRole, ROLES, canManageAllFinance } from '../constants/roles';
+import { normalizeRole, ROLES, canManageAllFinance, canViewAllFinance } from '../constants/roles';
 import * as financeApi from '../services/finance';
 
 const toast = useToast();
@@ -14,11 +14,16 @@ const isGroupBoss = computed(() => role.value === ROLES.GROUP_BOSS);
 const isGroupMember = computed(() => role.value === ROLES.GROUP_MEMBER);
 /** Super admin and finance manager handle boss → platform requests, as do flagged approvers. */
 const handlesAllFinance = computed(() => canManageAllFinance(authStore.user?.role, authStore.user?.degree));
+/** Admin (SYSTEM_ADMIN): views every request read-only (platform inbox), never handles or submits. */
+const isReadOnlyAdmin = computed(() => role.value === ROLES.SYSTEM_ADMIN);
+const viewsAllFinance = computed(() => canViewAllFinance(authStore.user?.role, authStore.user?.degree));
 const canUsePlatformInbox = computed(
-  () => handlesAllFinance.value || authStore.user?.paymentRequestApprover === true,
+  () => viewsAllFinance.value || authStore.user?.paymentRequestApprover === true,
 );
+/** May change a request status (Review button). */
+const canHandleRequests = computed(() => !isReadOnlyAdmin.value);
 
-const activeScope = ref(handlesAllFinance.value ? 'platform_inbox' : 'my');
+const activeScope = ref(viewsAllFinance.value ? 'platform_inbox' : 'my');
 const requests = ref([]);
 const loading = ref(false);
 const error = ref('');
@@ -47,8 +52,8 @@ const flowHint = computed(() => {
 
 const tabs = computed(() => {
   const t = [];
-  // Super admin and finance manager handle requests; they don't submit any.
-  if (!handlesAllFinance.value) {
+  // Super admin and finance manager handle requests (Admin only views them); they don't submit any.
+  if (!viewsAllFinance.value) {
     t.push({ key: 'my', label: 'My requests', scope: 'my', desc: 'Your submissions' });
   }
   if (isGroupBoss.value) {
@@ -160,6 +165,7 @@ const submitNew = async () => {
 const inboxScope = computed(() => activeScope.value === 'team_inbox' || activeScope.value === 'platform_inbox');
 
 const openAction = (req) => {
+  if (!canHandleRequests.value) return;
   actionModal.value = {
     open: true,
     request: req,
@@ -304,7 +310,7 @@ const submitAction = async () => {
               <div>
                 <h2 class="pr-panel__title">{{ listSectionTitle }}</h2>
                 <p class="pr-panel__sub">
-                  {{ inboxScope ? 'Review and update status for each row.' : 'Track status of your submissions.' }}
+                  {{ inboxScope ? (canHandleRequests ? 'Review and update status for each row.' : 'Read-only view of every request.') : 'Track status of your submissions.' }}
                 </p>
               </div>
             </div>
@@ -349,14 +355,15 @@ const submitAction = async () => {
                 </div>
                 <div v-if="inboxScope" class="pr-cardx__side">
                   <button
-                    v-if="r.status !== 'ACCEPTED' && r.status !== 'REJECTED'"
+                    v-if="canHandleRequests && r.status !== 'ACCEPTED' && r.status !== 'REJECTED'"
                     type="button"
                     class="pr-btn pr-btn--soft"
                     @click="openAction(r)"
                   >
                     Review
                   </button>
-                  <span v-else class="pr-cardx__done">Closed</span>
+                  <span v-else-if="r.status === 'ACCEPTED' || r.status === 'REJECTED'" class="pr-cardx__done">Closed</span>
+                  <span v-else class="pr-cardx__done">Open</span>
                 </div>
               </li>
             </ul>

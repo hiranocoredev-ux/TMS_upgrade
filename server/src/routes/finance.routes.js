@@ -5,6 +5,7 @@ import {
   requireAuth,
   requireRole,
   requireFinanceManager,
+  requireFinanceWriter,
 } from "../middleware/auth.middleware.js";
 import FinanceTransaction from "../models/FinanceTransaction.js";
 import FinanceGoal from "../models/FinanceGoal.js";
@@ -37,7 +38,7 @@ import {
   isGlobalFinanceViewer,
   FINANCE_META_GROUPS,
 } from "../utils/financeTeamScope.js";
-import { isSuperAdminRole, canManageAllFinance } from "../constants/roles.js";
+import { isSuperAdminRole, canManageAllFinance, isSystemAdminRole } from "../constants/roles.js";
 import {
   REVIEW,
   reviewStageOf,
@@ -1767,6 +1768,12 @@ router.put("/goals", async (req, res, next) => {
     const { month } = req.query;
     const user = req.user;
 
+    if (isSystemAdminRole(user.role, user.degree)) {
+      return res
+        .status(403)
+        .json(createErrorResponse("INSUFFICIENT_PERMISSIONS", "Finance is read-only for the Admin role", 403));
+    }
+
     if (!month) {
       return res
         .status(400)
@@ -2268,6 +2275,8 @@ const overviewMembers = async (user, groupCode) => {
  *   editableGroup "<code>"   → that team only (its group boss)
  */
 const planEditScope = (user) => {
+  // Admin sees every team's plans but finance is read-only for them.
+  if (isSystemAdminRole(user?.role, user?.degree)) return { canEdit: false, editableGroup: null };
   if (isGlobalFinanceViewer(user)) return { canEdit: true, editableGroup: null };
   const role = normalizeRole(user?.role, user?.degree);
   if (role === ROLES.GROUP_BOSS && user?.group) {
@@ -3401,7 +3410,7 @@ const updateFinancePeriodSchema = financePeriodSchema.partial();
 
 
 // Weeks are created / edited by super admin or finance manager.
-router.post('/periods', requireRole('SUPER_ADMIN', 'FINANCE_MANAGER'), async (req, res, next) => {
+router.post('/periods', requireFinanceWriter, async (req, res, next) => {
   try {
     const data = financePeriodSchema.parse(req.body);
     const period = await FinancePeriod.create({
@@ -3434,7 +3443,7 @@ router.post('/periods', requireRole('SUPER_ADMIN', 'FINANCE_MANAGER'), async (re
   }
 });
 
-router.put('/periods/:id', requireRole('SUPER_ADMIN', 'FINANCE_MANAGER'), async (req, res, next) => {
+router.put('/periods/:id', requireFinanceWriter, async (req, res, next) => {
   try {
     const period = await FinancePeriod.findById(req.params.id);
     if (!period) {

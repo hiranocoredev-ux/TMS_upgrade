@@ -15,7 +15,7 @@ const isOwner = (user, profile) => {
 const isGroupBossOrSuper = (user) => {
   if (!user?.role) return false;
   const r = normalizeRole(user.role, user.degree);
-  return r === ROLES.GROUP_BOSS || r === ROLES.SUPER_ADMIN;
+  return r === ROLES.GROUP_BOSS || r === ROLES.SUPER_ADMIN || r === ROLES.SYSTEM_ADMIN;
 };
 
 export const canViewJobProfile = (user, profile) => {

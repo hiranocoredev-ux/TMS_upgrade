@@ -27,6 +27,7 @@ export const isLocked = (tx) => reviewStageOf(tx) === REVIEW.APPROVED;
 
 const roleOf = (user) => normalizeRole(user?.role, user?.degree);
 export const isFinanceManagerReviewer = (user) => roleOf(user) === ROLES.FINANCE_MANAGER;
+/** Strictly SUPER_ADMIN: the Admin (SYSTEM_ADMIN) role is finance read-only and never reviews. */
 export const isAdminReviewer = (user) => roleOf(user) === ROLES.SUPER_ADMIN;
 export const isReviewer = (user) => isFinanceManagerReviewer(user) || isAdminReviewer(user);
 

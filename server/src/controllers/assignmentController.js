@@ -3,6 +3,7 @@ import Assignment from '../models/Assignment.js';
 import { createErrorResponse, createSuccessResponse } from '../utils/errors.js';
 import { log as auditLog, getRequestMeta } from '../utils/audit.js';
 import { normalizeRole, ROLES } from '../utils/roleMapper.js';
+import { isFullAdminRole } from '../constants/roles.js';
 import { ENTITY_GROUP_VALUES } from '../constants/groups.js';
 
 /* ------------------ Validation Schemas ------------------ */
@@ -28,7 +29,7 @@ const updateAssignmentSchema = createAssignmentSchema.partial().extend({
 
 const isAdminOrBoss = (user) => {
     const role = normalizeRole(user.role);
-    return role === ROLES.ADMIN || role === ROLES.BOSS || role === ROLES.SUPER_ADMIN;
+    return role === ROLES.ADMIN || role === ROLES.BOSS || isFullAdminRole(role);
 };
 
 const isOwner = (user, assignment) =>

@@ -371,7 +371,7 @@ import InterviewStage from '../models/InterviewStage.js';
 import InterviewTicket from '../models/InterviewTicket.js';
 import InterviewActivityLog from '../models/InterviewActivityLog.js';
 import { createErrorResponse, createSuccessResponse } from '../utils/errors.js';
-import { normalizeRole, ROLES } from '../constants/roles.js';
+import { normalizeRole, ROLES, isFullAdminRole } from '../constants/roles.js';
 
 /* --------------------------------------------------
  Helpers
@@ -390,7 +390,7 @@ const normalizeDates = (dates = []) =>
 const canAccessBoard = async (user, board) => {
   const role = normalizeRole(user.role, user.degree);
 
-  if (role === ROLES.SUPER_ADMIN) return true;
+  if (isFullAdminRole(role)) return true;
   if (board.ownerUserId.equals(user._id)) return true;
 
   if (board.visibility === 'team') {

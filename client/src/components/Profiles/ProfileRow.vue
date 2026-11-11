@@ -76,7 +76,7 @@
 <script setup>
 import { computed } from 'vue';
 import { useAuthStore } from '../../composables/useAuth';
-import { normalizeRole, ROLES } from '../../constants/roles.js';
+import { normalizeRole, ROLES, isFullAdminRole } from '../../constants/roles.js';
 import { formatGroupLabel } from '../../constants/groups.js';
 
 const props = defineProps({
@@ -96,7 +96,7 @@ const canEdit = computed(() => {
   const userGroup = authStore.user?.group;
   const profileGroup = props.profile.group;
 
-  if (userRole === ROLES.SUPER_ADMIN) return true;
+  if (isFullAdminRole(userRole)) return true;
 
   if (userGroup && !['SUPER_ADMIN', 'ADMIN'].includes(userGroup)) {
     if (profileGroup !== userGroup) return false;
@@ -120,7 +120,7 @@ const canDelete = computed(() => {
   const userGroup = authStore.user?.group;
   const profileGroup = props.profile.group;
 
-  if (userRole === ROLES.SUPER_ADMIN) return true;
+  if (isFullAdminRole(userRole)) return true;
 
   if (userGroup && !['SUPER_ADMIN', 'ADMIN'].includes(userGroup)) {
     if (profileGroup !== userGroup) return false;

@@ -4,6 +4,7 @@ import { createErrorResponse, createSuccessResponse } from '../utils/errors.js';
 import { DEFAULT_ENTITY_GROUP } from '../constants/groups.js';
 import { log as auditLog, getRequestMeta } from '../utils/audit.js';
 import { normalizeRole, ROLES } from '../utils/roleMapper.js';
+import { isFullAdminRole } from '../constants/roles.js';
 import { jobProfilePermissions } from '../utils/permissions/entityPermissions.js';
 import { sanitizeJobProfile } from '../utils/sanitizer.js';
 import { createModuleUpload } from '../middleware/upload.middleware.js';
@@ -71,7 +72,7 @@ export const listJobProfiles = async (req, res, next) => {
       query.status = status;
     }
 
-    if (owner && (userRole === ROLES.GROUP_BOSS || userRole === ROLES.SUPER_ADMIN)) {
+    if (owner && (userRole === ROLES.GROUP_BOSS || isFullAdminRole(userRole))) {
       query.ownerUserId = owner;
     } else if (owner && userRole === ROLES.GROUP_MEMBER && owner !== user._id.toString()) {
       return res.status(403).json(createErrorResponse(
@@ -205,7 +206,7 @@ export const createJobProfile = async (req, res, next) => {
 
     const requestedGroup = req.body.group || DEFAULT_ENTITY_GROUP;
     const userGroup = req.user?.group;
-    const isSuperAdmin = userRole === ROLES.SUPER_ADMIN;
+    const isSuperAdmin = isFullAdminRole(userRole);
     if (!isSuperAdmin && userGroup && !['SUPER_ADMIN', 'ADMIN'].includes(userGroup)) {
       if (requestedGroup !== userGroup) {
         return res.status(403).json(createErrorResponse(
@@ -292,7 +293,7 @@ export const updateJobProfile = async (req, res, next) => {
 
     const userRole = normalizeRole(req.user.role, req.user.degree);
     const userGroup = req.user?.group;
-    if (userRole !== ROLES.SUPER_ADMIN && userGroup && !['SUPER_ADMIN', 'ADMIN'].includes(userGroup)) {
+    if (!isFullAdminRole(userRole) && userGroup && !['SUPER_ADMIN', 'ADMIN'].includes(userGroup)) {
       if (profile.group !== userGroup) {
         return res.status(403).json(createErrorResponse(
           'ACCESS_DENIED',
@@ -398,7 +399,7 @@ export const deleteJobProfile = async (req, res, next) => {
 
     const userRole = normalizeRole(req.user.role, req.user.degree);
     const userGroup = req.user?.group;
-    if (userRole !== ROLES.SUPER_ADMIN && userGroup && !['SUPER_ADMIN', 'ADMIN'].includes(userGroup)) {
+    if (!isFullAdminRole(userRole) && userGroup && !['SUPER_ADMIN', 'ADMIN'].includes(userGroup)) {
       if (profile.group !== userGroup) {
         return res.status(403).json(createErrorResponse(
           'ACCESS_DENIED',

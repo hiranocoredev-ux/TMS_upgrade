@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 
 import Daily from "../models/Daily.js";
 import { DEFAULT_SECTIONS } from "../constants/defaultsection.js";
-import { normalizeRole, ROLES } from "../constants/roles.js";
+import { normalizeRole, ROLES, isFullAdminRole } from "../constants/roles.js";
 import { normalizeReportDateByPeriodEST } from '../utils/estTime.js';
 
 const router = express.Router();
@@ -28,7 +28,7 @@ export const getAll = async (req, res) => {
 
     try {
         const effective = normalizeRole(req.user?.role, req.user?.degree);
-        const query = effective === ROLES.SUPER_ADMIN ? {} : { group };
+        const query = isFullAdminRole(effective) ? {} : { group };
 
         const dailys = await Daily.find(query).sort({ date: -1 });
         res.status(200).json(dailys);
@@ -61,7 +61,7 @@ export const updateDaily = async (req, res) => {
         const normalizedDate = normalizeReportDateByPeriodEST(date, 'daily');
 
         const effective = normalizeRole(user?.role, user?.degree);
-        if (effective !== ROLES.SUPER_ADMIN && group !== user?.group) {
+        if (!isFullAdminRole(effective) && group !== user?.group) {
             return res.status(403).json({ message: 'You can only edit your own group\'s reports' });
         }
 
@@ -99,7 +99,7 @@ export const deleteDaily = async (req, res) => {
     if (!daily) return res.status(404).json({ message: 'Report not found' });
 
     const effective = normalizeRole(user?.role, user?.degree);
-    if (effective !== ROLES.SUPER_ADMIN && daily.group !== user?.group) {
+    if (!isFullAdminRole(effective) && daily.group !== user?.group) {
         return res.status(403).json({ message: 'You can only delete your own group\'s reports' });
     }
 

@@ -442,7 +442,7 @@ const runTest = async (channel) => {
 };
 
 const formatRole = (role) =>
-  role ? role.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase()) : '-';
+  role === 'SYSTEM_ADMIN' ? 'Admin' : role ? role.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase()) : '-';
 
 onMounted(loadProfile);
 onBeforeUnmount(() => {

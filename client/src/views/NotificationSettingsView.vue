@@ -192,7 +192,7 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue';
 import { useAuthStore } from '../composables/useAuth';
-import { normalizeRole, ROLES } from '../constants/roles';
+import { normalizeRole, ROLES, isFullAdminRole } from '../constants/roles';
 import { sortUsersByGroup } from '../utils/userOrder';
 import UserAvatar from '../components/UserAvatar.vue';
 import {
@@ -203,7 +203,7 @@ import {
 } from '../services/notifications';
 
 const auth = useAuthStore();
-const canEdit = computed(() => normalizeRole(auth.user?.role, auth.user?.degree) === ROLES.SUPER_ADMIN);
+const canEdit = computed(() => isFullAdminRole(auth.user?.role, auth.user?.degree));
 const saving = ref(false);
 const testingUserId = ref('');
 const logs = ref([]);

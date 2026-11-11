@@ -155,7 +155,7 @@ import { useRouter } from 'vue-router';
 import { useAuthStore } from '../composables/useAuth';
 import * as boardService from '../services/interviewBoards';
 import * as userService from '../services/users';
-import { normalizeRole, ROLES } from '../constants/roles.js';
+import { normalizeRole, ROLES, isFullAdminRole } from '../constants/roles.js';
 
 const router = useRouter();
 const authStore = useAuthStore();
@@ -194,7 +194,7 @@ const canDelete = (board) => {
   if (!authStore.user || !board) return false;
   const userRole = normalizeRole(authStore.user.role);
   const isOwner = board.ownerUserId?._id === authStore.user._id || board.ownerUserId === authStore.user._id;
-  return isOwner || userRole === ROLES.SUPER_ADMIN;
+  return isOwner || isFullAdminRole(userRole);
 };
 
 const loadBoards = async () => {

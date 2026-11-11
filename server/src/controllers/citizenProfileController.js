@@ -4,7 +4,7 @@ import CitizenProfile from '../models/CitizenProfile.js';
 import User from '../models/User.js';
 import { AppError, createSuccessResponse } from '../utils/errors.js';
 import { log as auditLog, getRequestMeta } from '../utils/audit.js';
-import { normalizeRole, ROLES } from '../constants/roles.js';
+import { normalizeRole, ROLES, isFullAdminRole, isNonMemberRole } from '../constants/roles.js';
 import {
   PROFILE_ACCOUNT_KEYS,
   PROFILE_ACCOUNT_SIZES,
@@ -23,13 +23,14 @@ import {
  * while other members only read. Reassigning and deleting stay with the admins.
  */
 
-const isSuperAdmin = (user) => normalizeRole(user?.role, user?.degree) === ROLES.SUPER_ADMIN;
+// Super admin or admin
+const isSuperAdmin = (user) => isFullAdminRole(user?.role, user?.degree);
 const isGroupBoss = (user) => normalizeRole(user?.role, user?.degree) === ROLES.GROUP_BOSS;
 
 /** Who may create a profile at all, and so pick its owner. */
 const canCreate = (user) => isSuperAdmin(user) || isGroupBoss(user);
 
-/** Super admin anywhere, a group boss inside their own group. */
+/** Super admin / admin anywhere, a group boss inside their own group. */
 const isAdminFor = (user, profile) => {
   if (isSuperAdmin(user)) return true;
   return isGroupBoss(user) && !!user.group && String(profile.group) === String(user.group);
@@ -136,8 +137,8 @@ const cleanImages = (images = [], existing = [], userId = null) => {
 const ownerOf = async (ownerUserId) => {
   const owner = await User.findById(ownerUserId).select('_id name email group role degree workingRole').lean();
   if (!owner) throw new AppError('NOT_FOUND', 'Owner not found', 404);
-  if (normalizeRole(owner.role, owner.degree) === ROLES.SUPER_ADMIN) {
-    throw new AppError('INVALID_OWNER', 'A super admin cannot own a citizen profile', 400);
+  if (isNonMemberRole(owner.role, owner.degree)) {
+    throw new AppError('INVALID_OWNER', 'A super admin, admin or finance manager cannot own a citizen profile', 400);
   }
   return owner;
 };

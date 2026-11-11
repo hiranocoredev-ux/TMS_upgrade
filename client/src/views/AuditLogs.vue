@@ -358,6 +358,7 @@ const formatResourceType = (type) => {
 
 const formatRole = (role) => {
   if (!role) return '';
+  if (role === 'SYSTEM_ADMIN') return 'Admin';
   return role.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
 };
 

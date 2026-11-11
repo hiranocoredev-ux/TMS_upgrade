@@ -199,7 +199,7 @@
 import { ref, computed, watch } from 'vue';
 import { useStore } from 'vuex';
 import { useAuthStore } from '../../../composables/useAuth';
-import { normalizeRole, ROLES } from '../../../constants/roles.js';
+import { normalizeRole, ROLES, isFullAdminRole } from '../../../constants/roles.js';
 import { ENTITY_GROUP_OPTIONS, formatGroupLabel, DEFAULT_ENTITY_GROUP } from '../../../constants/groups.js';
 import ProfileHeader from './ProfileHeader.vue';
 import ProfilePicture from './ProfilePicture.vue';
@@ -226,7 +226,7 @@ const canEdit = computed(() => {
     return true;
   }
 
-  if (userRole === ROLES.GROUP_BOSS || userRole === ROLES.SUPER_ADMIN) {
+  if (userRole === ROLES.GROUP_BOSS || isFullAdminRole(userRole)) {
     return true;
   }
 
@@ -244,7 +244,7 @@ const showSensitiveFields = computed(() => {
     return true;
   }
 
-  if (userRole === ROLES.SUPER_ADMIN) {
+  if (isFullAdminRole(userRole)) {
     return true;
   }
 

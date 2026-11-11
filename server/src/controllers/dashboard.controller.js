@@ -30,7 +30,7 @@ import {
  * Excludes:
  *   - Users with status !== 'active'
  *   - Group '*' (super-admin sentinel)
- *   - Users with role 'SUPER_ADMIN'  never appears in cards or in the
+ *   - Non-member roles (SUPER_ADMIN, SYSTEM_ADMIN, FINANCE_MANAGER)  never appear in cards or in the
  *     returned `groups` list.
  */
 export const getDashboard = async (req, res) => {

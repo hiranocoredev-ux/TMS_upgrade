@@ -959,7 +959,7 @@ export const uploadPicture = async (req, res, next) => {
 };
 
 /* ============================================================
-   TRANSACTIONS — per-tab (GROUP_BOSS or SUPER_ADMIN only)
+   TRANSACTIONS — per-tab (GROUP_BOSS, SUPER_ADMIN or SYSTEM_ADMIN only)
 ============================================================ */
 
 export const addTabTransaction = async (req, res, next) => {

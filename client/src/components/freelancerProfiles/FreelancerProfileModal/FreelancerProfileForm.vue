@@ -137,7 +137,7 @@
 <script setup>
 import { ref, watch, computed } from 'vue';
 import { useAuthStore } from '../../../composables/useAuth';
-import { normalizeRole, ROLES } from '../../../constants/roles.js';
+import { normalizeRole, ROLES, isFullAdminRole } from '../../../constants/roles.js';
 import { ENTITY_GROUP_OPTIONS, DEFAULT_ENTITY_GROUP } from '../../../constants/groups.js';
 import FileUploadSection from '../../Profiles/ProfileModal/FileUploadSection.vue';
 import CountrySelect from '../../common/CountrySelect.vue';
@@ -167,7 +167,7 @@ const canEditSensitiveFields = computed(() => {
   if (!props.profile) return true;
   const ownerId = props.profile.ownerUserId?._id || props.profile.ownerUserId;
   const userRole = normalizeRole(authStore.user.role);
-  return ownerId === authStore.user._id || userRole === ROLES.SUPER_ADMIN;
+  return ownerId === authStore.user._id || isFullAdminRole(userRole);
 });
 
 const form = ref({

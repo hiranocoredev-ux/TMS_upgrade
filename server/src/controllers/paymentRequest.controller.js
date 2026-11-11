@@ -17,6 +17,8 @@ const isGroupBoss = (u) => normalizeRole(u?.role, u?.degree) === ROLES.GROUP_BOS
 export const canHandleBossToPlatformRequests = (u) => {
   if (!u) return false;
   if (canManageAllFinance(u.role, u.degree)) return true;
+  // Finance is read-only for the admin role, approver flag or not.
+  if (normalizeRole(u.role, u.degree) === ROLES.SYSTEM_ADMIN) return false;
   return u.paymentRequestApprover === true;
 };
 
@@ -224,7 +226,8 @@ export const listPaymentRequests = async (req, res, next) => {
       query.group = g;
       query.requesterId = { $ne: req.user._id };
     } else if (scope === 'platform_inbox') {
-      if (!canHandleBossToPlatformRequests(req.user)) {
+      // Admin may look (finance is read-only for them); handling still needs canHandleBossToPlatformRequests.
+      if (!canHandleBossToPlatformRequests(req.user) && role !== ROLES.SYSTEM_ADMIN) {
         return res.status(403).json(createErrorResponse('FORBIDDEN', 'Not allowed to view platform inbox', 403));
       }
       query.flowType = PAYMENT_REQUEST_FLOW.BOSS_TO_PLATFORM;

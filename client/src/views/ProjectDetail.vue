@@ -271,7 +271,7 @@ const canEditTask = (task) => {
 const canDeleteTask = (task) => {
   if (!authStore.user || !project.value) return false;
   const isOwner = (project.value.ownerUserId?._id || project.value.ownerUserId) === authStore.user._id;
-  return isOwner || authStore.user.role === 'SUPER_ADMIN';
+  return isOwner || ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(authStore.user.role);
 };
 
 const loadProject = async () => {

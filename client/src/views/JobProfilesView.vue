@@ -72,7 +72,7 @@
 import { ref, computed, onMounted, watch } from 'vue';
 import { useStore } from 'vuex';
 import { useAuthStore } from '../composables/useAuth';
-import { normalizeRole, ROLES } from '../constants/roles.js';
+import { normalizeRole, ROLES, isFullAdminRole } from '../constants/roles.js';
 import { fetchGroups } from '../services/admin.js';
 import ProfileTable from '../components/Profiles/ProfileTable.vue';
 import ProfileModal from '../components/Profiles/ProfileModal/ProfileModal.vue';
@@ -98,7 +98,7 @@ let searchTimeout = null;
 const canCreate = computed(() => {
   if (!authStore.user) return false;
   const userRole = normalizeRole(authStore.user.role, authStore.user.degree);
-  return userRole === ROLES.SUPER_ADMIN ||
+  return isFullAdminRole(userRole) ||
          userRole === ROLES.GROUP_BOSS ||
          authStore.user.editor === true;
 });

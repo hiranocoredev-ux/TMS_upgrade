@@ -87,7 +87,7 @@ export const uploadProfilePicture = async (id, file) => {
 /**
  * Record a transaction (income only) against a single working-role tab.
  * Server applies clientSharePercent to derive `given` and `profit`.
- * Gated to SUPER_ADMIN or GROUP_BOSS.
+ * Gated to SUPER_ADMIN, SYSTEM_ADMIN (Admin) or GROUP_BOSS.
  */
 export const addTabTransaction = async (id, role, payload) => {
   const { data } = await apiClient.post(`/profiles/${id}/tabs/${role}/transactions`, payload);

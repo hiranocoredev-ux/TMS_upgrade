@@ -30,7 +30,7 @@ export const hasAnyRole = (user, roles) => {
   return hasAnyRoleUtil(user, roles);
 };
 
-/** Super Admin or Group Boss (legacy ADMIN/BOSS map here). */
+/** Super Admin, Admin (SYSTEM_ADMIN) or Group Boss (legacy ADMIN/BOSS map here). */
 export const isAdmin = (user) => {
   if (!user || !user.role) return false;
   return isAdminRoleUtil(user.role, user.degree);

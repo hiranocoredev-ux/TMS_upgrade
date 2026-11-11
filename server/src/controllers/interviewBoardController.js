@@ -4,7 +4,7 @@ import InterviewTicket from '../models/InterviewTicket.js';
 import InterviewActivityLog from '../models/InterviewActivityLog.js';
 import { createErrorResponse, createSuccessResponse } from '../utils/errors.js';
 import { log as auditLog, getRequestMeta } from '../utils/audit.js';
-import { normalizeRole, ROLES } from '../constants/roles.js';
+import { normalizeRole, ROLES, isFullAdminRole } from '../constants/roles.js';
 
 /**
  * Validate interview board data
@@ -77,7 +77,7 @@ export const canEditBoard = async (user, board) => {
   
   const userRole = normalizeRole(user.role, user.degree);
   
-  if (userRole === ROLES.SUPER_ADMIN) {
+  if (isFullAdminRole(userRole)) {
     return true;
   }
   
@@ -104,8 +104,8 @@ export const listInterviewBoards = async (req, res, next) => {
     
     const query = {};
     
-    if (userRole === ROLES.SUPER_ADMIN) {
-      // SUPER_ADMIN sees all
+    if (isFullAdminRole(userRole)) {
+      // SUPER_ADMIN / SYSTEM_ADMIN see all
     } else if (userRole === ROLES.GROUP_BOSS || userRole === ROLES.GROUP_MEMBER) {
       query.$or = [
         { ownerUserId: user._id },
@@ -327,8 +327,8 @@ export const deleteInterviewBoard = async (req, res, next) => {
       ));
     }
     
-    const userRole = normalizeRole(req.user.role);
-    if (board.ownerUserId.toString() !== req.user._id.toString() && userRole !== ROLES.SUPER_ADMIN) {
+    const userRole = normalizeRole(req.user.role, req.user.degree);
+    if (board.ownerUserId.toString() !== req.user._id.toString() && !isFullAdminRole(userRole)) {
       return res.status(403).json(createErrorResponse(
         'ACCESS_DENIED',
         'You do not have permission to delete this board',

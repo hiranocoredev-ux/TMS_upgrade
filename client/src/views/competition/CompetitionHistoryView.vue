@@ -212,7 +212,7 @@ import {
 
 const auth = useAuthStore();
 const router = useRouter();
-const canAdmin = computed(() => hasAnyRole(auth.user, [ROLES.SUPER_ADMIN]));
+const canAdmin = computed(() => hasAnyRole(auth.user, [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN]));
 
 const month = ref(currentMonthKey());
 const searchTerm = ref('');

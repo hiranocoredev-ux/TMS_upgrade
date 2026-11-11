@@ -817,12 +817,12 @@ const scoreListTitle = computed(() =>
 );
 
 const canAddTime = computed(() =>
-  hasAnyRole(authStore.user, [ROLES.SUPER_ADMIN])
+  hasAnyRole(authStore.user, [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN])
 );
 
-/** Super Admin: add/edit/remove manual entries inside the breakdown modal */
+/** Super Admin / Admin: add/edit/remove manual entries inside the breakdown modal */
 const canManageMemberManualDetail = computed(() =>
-  hasAnyRole(authStore.user, [ROLES.SUPER_ADMIN])
+  hasAnyRole(authStore.user, [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN])
 );
 
 /** “By users” chart: tap a member bar for manual breakdown (scoped by role on the API). */

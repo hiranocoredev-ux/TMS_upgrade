@@ -7,7 +7,7 @@ import CompetitionWorktimeDayRule from '../models/CompetitionWorktimeDayRule.js'
 import CompetitionWorktimeUserDayRule from '../models/CompetitionWorktimeUserDayRule.js';
 import WorktimeTarget from '../models/WorktimeTarget.js';
 import User from '../models/User.js';
-import { normalizeRole, ROLES } from '../constants/roles.js';
+import { normalizeRole, ROLES, isFullAdminRole, isNonMemberRole, NON_MEMBER_ROLES } from '../constants/roles.js';
 import {
   MONTH_RE,
   computeMonthlyLeaderboards,
@@ -16,7 +16,8 @@ import {
 } from '../services/competitionScoring.js';
 import { sendPenaltyAddedNotifications } from '../services/notification.service.js';
 
-const isSuperAdmin = (user) => normalizeRole(user.role, user.degree) === ROLES.SUPER_ADMIN;
+// Super admin or admin (competition is not finance)
+const isSuperAdmin = (user) => isFullAdminRole(user?.role, user?.degree);
 
 const isGroupBossUser = (user) => normalizeRole(user?.role, user?.degree) === ROLES.GROUP_BOSS;
 
@@ -170,7 +171,7 @@ export const getWorktimeRules = async (req, res) => {
         .sort({ group: 1, name: 1 })
         .lean(),
     ]);
-    const participants = users.filter((u) => normalizeRole(u.role, u.degree) !== ROLES.SUPER_ADMIN);
+    const participants = users.filter((u) => !isNonMemberRole(u.role, u.degree));
     res.json({
       ok: true,
       data: {
@@ -260,7 +261,7 @@ export const upsertWorktimeUserDayRule = async (req, res) => {
       return res.status(400).json({ ok: false, message: 'valid userId required' });
     }
     const target = await User.findById(userId).select('role degree').lean();
-    if (!target || normalizeRole(target.role, target.degree) === ROLES.SUPER_ADMIN) {
+    if (!target || isNonMemberRole(target.role, target.degree)) {
       return res.status(400).json({ ok: false, message: 'invalid competition user' });
     }
     const mode = String(kind || '').trim() || 'reduce';
@@ -499,10 +500,10 @@ export const createAdjustment = async (req, res) => {
       if (!userId || !mongoose.isValidObjectId(userId)) {
         return res.status(400).json({ ok: false, message: 'userId required for user scope' });
       }
-      const target = await User.findById(userId).select('role').lean();
+      const target = await User.findById(userId).select('role degree').lean();
       if (!target) return res.status(404).json({ ok: false, message: 'User not found' });
-      if (normalizeRole(target.role, target.degree) === ROLES.SUPER_ADMIN) {
-        return res.status(400).json({ ok: false, message: 'Cannot adjust super admin competition' });
+      if (isNonMemberRole(target.role, target.degree)) {
+        return res.status(400).json({ ok: false, message: 'Cannot adjust competition for super admin, admin or finance manager' });
       }
       const row = await CompetitionAdjustment.create({
         month: String(month).trim(),
@@ -654,7 +655,7 @@ export const getUserDetail = async (req, res) => {
       .select('name email group hubstaff_id role degree')
       .lean();
     if (!user) return res.status(404).json({ ok: false, message: 'User not found' });
-    if (normalizeRole(user.role, user.degree) === ROLES.SUPER_ADMIN) {
+    if (isNonMemberRole(user.role, user.degree)) {
       return res.status(404).json({ ok: false, message: 'Not found' });
     }
 
@@ -706,7 +707,7 @@ export const getHistorySummary = async (req, res) => {
     const users = await User.find({})
       .select('_id name group avatarUrl role degree')
       .lean();
-    const participantUsers = users.filter((u) => normalizeRole(u.role, u.degree) !== ROLES.SUPER_ADMIN);
+    const participantUsers = users.filter((u) => !isNonMemberRole(u.role, u.degree));
     const userMap = new Map(participantUsers.map((u) => [String(u._id), u]));
 
     const rows = await CompetitionAdjustment.find({ month })
@@ -824,7 +825,7 @@ export const getHistoryDetail = async (req, res) => {
       }
       const user = await User.findById(userId).select('_id name group avatarUrl role degree').lean();
       if (!user) return res.status(404).json({ ok: false, message: 'User not found' });
-      if (normalizeRole(user.role, user.degree) === ROLES.SUPER_ADMIN) {
+      if (isNonMemberRole(user.role, user.degree)) {
         return res.status(404).json({ ok: false, message: 'Not found' });
       }
       title = `${user.name}`;
@@ -837,13 +838,13 @@ export const getHistoryDetail = async (req, res) => {
       title = groupCode || 'Unassigned';
       const members = await User.find({
         status: 'active',
-        role: { $ne: 'SUPER_ADMIN' },
+        role: { $nin: NON_MEMBER_ROLES },
         group: groupCode,
       })
         .select('_id name role degree avatarUrl')
         .lean();
       const eligibleMembers = members.filter(
-        (u) => normalizeRole(u.role, u.degree) !== ROLES.SUPER_ADMIN
+        (u) => !isNonMemberRole(u.role, u.degree)
       );
       groupMembers = eligibleMembers
         .map((u) => ({

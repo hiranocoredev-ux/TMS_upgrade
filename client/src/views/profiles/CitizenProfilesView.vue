@@ -148,12 +148,12 @@ import { listCitizenProfiles, deleteCitizenProfile, citizenImageUrl } from '../.
 import { fetchGroups } from '../../services/admin';
 import { fetchUsers } from '../../services/users';
 import { excludeSuperAdmin } from '../../utils/userFilters';
-import { normalizeRole, ROLES } from '../../constants/roles';
+import { normalizeRole, ROLES, isFullAdminRole } from '../../constants/roles';
 
 const router = useRouter();
 const store = useStore();
 const currentUser = computed(() => store.state.auth?.user || null);
-const isSuperAdmin = computed(() => normalizeRole(currentUser.value?.role) === ROLES.SUPER_ADMIN);
+const isSuperAdmin = computed(() => isFullAdminRole(currentUser.value?.role, currentUser.value?.degree));
 
 const profiles = ref([]);
 const groups = ref([]);

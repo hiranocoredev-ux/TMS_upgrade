@@ -249,7 +249,7 @@ const canEditProject = (project) => {
 const canDeleteProject = (project) => {
   if (!authStore.user || !project) return false;
   const isOwner = (project.ownerUserId?._id || project.ownerUserId) === authStore.user._id;
-  return isOwner || authStore.user.role === 'SUPER_ADMIN';
+  return isOwner || ['SUPER_ADMIN', 'SYSTEM_ADMIN'].includes(authStore.user.role);
 };
 
 const viewProject = (project) => {

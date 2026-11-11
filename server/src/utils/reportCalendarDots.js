@@ -97,7 +97,8 @@ function rosterUsersFromFetchPayload(res, { includeBoss = true } = {}) {
   for (const u of list) {
     if (!u || u.status === 'disabled') continue;
     const role = u.role || '';
-    if (role === 'SUPER_ADMIN') continue;
+    // Non-member roles (super admin, admin, finance manager) never report
+    if (['SUPER_ADMIN', 'SYSTEM_ADMIN', 'FINANCE_MANAGER'].includes(role)) continue;
     if (!includeBoss && role === 'GROUP_BOSS') continue;
     out.push(u);
   }

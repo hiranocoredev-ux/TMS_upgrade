@@ -1,6 +1,6 @@
 import express from 'express';
 import mongoose from 'mongoose';
-import { requireAuth, requireRole } from '../middleware/auth.middleware.js';
+import { requireAuth, requireSuperAdmin } from '../middleware/auth.middleware.js';
 import { createErrorResponse, createSuccessResponse } from '../utils/errors.js';
 import { log as auditLog, getRequestMeta } from '../utils/audit.js';
 
@@ -27,9 +27,9 @@ import InterviewActivityLog from '../models/InterviewActivityLog.js';
 
 const router = express.Router();
 
-// Only SUPER_ADMIN and ADMIN can access database routes
+// Backup / restore holds every record (finance included): super admin only.
 router.use(requireAuth);
-router.use(requireRole('SUPER_ADMIN', 'GROUP_BOSS', 'ADMIN', 'BOSS'));
+router.use(requireSuperAdmin);
 
 // Model mapping for easy iteration
 const models = {

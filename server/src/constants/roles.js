@@ -1,7 +1,11 @@
 /**
- * Canonical role model (4 roles)
+ * Canonical role model (5 roles)
  *
  * - SUPER_ADMIN: full system access (your “team boss” / platform owner)
+ * - SYSTEM_ADMIN ("Admin"): everything a super admin can do except changing
+ *   finance — finance is read-only for them (all teams). Cannot manage super
+ *   admin / admin / finance manager accounts or the database backup.
+ *   (Stored as SYSTEM_ADMIN because the legacy value "ADMIN" means group boss.)
  * - GROUP_BOSS: boss of one group (team lead within their group)
  * - GROUP_MEMBER: normal member within a group
  * - FINANCE_MANAGER: full control of Finance for every team (plus read-only
@@ -13,6 +17,7 @@
 
 export const ROLES = {
   SUPER_ADMIN: 'SUPER_ADMIN',
+  SYSTEM_ADMIN: 'SYSTEM_ADMIN',
   GROUP_BOSS: 'GROUP_BOSS',
   GROUP_MEMBER: 'GROUP_MEMBER',
   FINANCE_MANAGER: 'FINANCE_MANAGER',
@@ -38,6 +43,7 @@ export const normalizeRole = (role, degree) => {
   const d = degree ? String(degree) : '';
 
   if (r === ROLES.SUPER_ADMIN) return ROLES.SUPER_ADMIN;
+  if (r === ROLES.SYSTEM_ADMIN) return ROLES.SYSTEM_ADMIN;
   if (r === ROLES.GROUP_BOSS) return ROLES.GROUP_BOSS;
   if (r === ROLES.GROUP_MEMBER) return ROLES.GROUP_MEMBER;
   if (r === ROLES.FINANCE_MANAGER) return ROLES.FINANCE_MANAGER;
@@ -64,19 +70,31 @@ export const normalizeRole = (role, degree) => {
  * Roles that belong to no group and are never counted as team members
  * (member lists, dashboard cards, worktime, report reminders, competition).
  */
-export const NON_MEMBER_ROLES = [ROLES.SUPER_ADMIN, ROLES.FINANCE_MANAGER];
+export const NON_MEMBER_ROLES = [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.FINANCE_MANAGER];
 
-/** Super-admin only */
-export const OVERRIDE_ROLES = [ROLES.SUPER_ADMIN];
+/** Super admin and admin: full access outside finance. */
+export const FULL_ADMIN_ROLES = [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN];
+
+/** Super-admin and admin may bypass ownership outside finance */
+export const OVERRIDE_ROLES = FULL_ADMIN_ROLES;
 
 /** Can manage users/groups / cross-cutting admin (not necessarily every module) */
-export const PLATFORM_ADMIN_ROLES = [ROLES.SUPER_ADMIN];
+export const PLATFORM_ADMIN_ROLES = FULL_ADMIN_ROLES;
 
-/** Group-level leadership (old ADMIN/BOSS) */
-export const GROUP_LEADER_ROLES = [ROLES.SUPER_ADMIN, ROLES.GROUP_BOSS];
+/** Group-level leadership (old ADMIN/BOSS); admin counts as a leader too (finance writes exclude them separately). */
+export const GROUP_LEADER_ROLES = [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN, ROLES.GROUP_BOSS];
 
+/** Strictly the super admin (finance writes, approvals, protected accounts, database). */
 export const isSuperAdminRole = (role, degree) =>
   normalizeRole(role, degree) === ROLES.SUPER_ADMIN;
+
+/** The "Admin" role: super admin minus finance changes. */
+export const isSystemAdminRole = (role, degree) =>
+  normalizeRole(role, degree) === ROLES.SYSTEM_ADMIN;
+
+/** Super admin or admin: full access to everything that is not a finance change. */
+export const isFullAdminRole = (role, degree) =>
+  FULL_ADMIN_ROLES.includes(normalizeRole(role, degree));
 
 export const isGroupBossRole = (role, degree) =>
   normalizeRole(role, degree) === ROLES.GROUP_BOSS;
@@ -84,13 +102,17 @@ export const isGroupBossRole = (role, degree) =>
 export const isFinanceManagerRole = (role, degree) =>
   normalizeRole(role, degree) === ROLES.FINANCE_MANAGER;
 
-/** Super admin or finance manager: belongs to no group, not a team member. */
+/** Super admin, admin or finance manager: belongs to no group, not a team member. */
 export const isNonMemberRole = (role, degree) =>
   NON_MEMBER_ROLES.includes(normalizeRole(role, degree));
 
-/** Sees and manages finance for every team: super admin or finance manager. */
+/** Sees and manages finance for every team: super admin or finance manager (not admin). */
 export const canManageAllFinance = (role, degree) =>
   [ROLES.SUPER_ADMIN, ROLES.FINANCE_MANAGER].includes(normalizeRole(role, degree));
+
+/** Sees finance for every team: super admin, finance manager, or admin (read-only). */
+export const canViewAllFinance = (role, degree) =>
+  [ROLES.SUPER_ADMIN, ROLES.FINANCE_MANAGER, ROLES.SYSTEM_ADMIN].includes(normalizeRole(role, degree));
 
 export const isGroupMemberRole = (role, degree) =>
   normalizeRole(role, degree) === ROLES.GROUP_MEMBER;
@@ -105,9 +127,9 @@ export const isValidRole = (role) =>
 export const isAdminRole = (role, degree) =>
   GROUP_LEADER_ROLES.includes(normalizeRole(role, degree));
 
-/** Only super admin may bypass ownership / global rules */
+/** Super admin and admin may bypass ownership / global rules (outside finance) */
 export const canOverrideOwnership = (role, degree) =>
-  isSuperAdminRole(role, degree);
+  isFullAdminRole(role, degree);
 
 /** Can view team-level summaries (not necessarily unmasked PII) */
 export const canViewTeamData = (role, degree) =>

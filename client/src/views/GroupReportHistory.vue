@@ -137,7 +137,7 @@ const authStore = useAuthStore();
 const route = useRoute();
 
 const detailViewer = computed(() =>
-  hasAnyRole(authStore.user, [ROLES.SUPER_ADMIN]) ? DailyReportViewSuperAdmin : DailyReportViewBoss
+  hasAnyRole(authStore.user, [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN]) ? DailyReportViewSuperAdmin : DailyReportViewBoss
 );
 const period = computed(() => getReportPeriod(route.meta?.reportPeriod));
 const documentKind = computed(() => getDocumentKindFromRoute(route));

@@ -13,7 +13,7 @@ import {
   isOwner,
   getPermissions 
 } from '../permissions.js';
-import { ROLES } from '../../constants/roles.js';
+import { isFullAdminRole, isSystemAdminRole } from '../../constants/roles.js';
 import { hasAdminPrivileges } from '../roleMapper.js';
 import dotenv from 'dotenv';
 
@@ -26,7 +26,7 @@ const BOSS_CAN_EDIT_PROJECTS = process.env.BOSS_CAN_EDIT_PROJECTS === 'true';
  *
  * Users can hold MULTIPLE working roles. The 4 personas drive access:
  *
- *   - SUPER_ADMIN              — full read/write everywhere.
+ *   - SUPER_ADMIN / SYSTEM_ADMIN — full read/write everywhere.
  *   - GROUP_BOSS               — read/write all common sections (Base / Contact /
  *                                Contract); read/write any tab whose role appears
  *                                in their own `user.workingRoles[]`.
@@ -49,7 +49,8 @@ const BOSS_CAN_EDIT_PROJECTS = process.env.BOSS_CAN_EDIT_PROJECTS === 'true';
 const WORKING_ROLE_HUNTING = 'hunting_profile';
 
 const userRoles = (user) => (user && Array.isArray(user.workingRoles)) ? user.workingRoles : [];
-const isSuperAdmin = (user) => !!user && user.role === ROLES.SUPER_ADMIN;
+// Super admin or admin (full access outside finance)
+const isSuperAdmin = (user) => !!user && isFullAdminRole(user.role, user.degree);
 const isGroupBoss = (user) => !!user && hasAdminPrivileges(user); // GROUP_BOSS + legacy ADMIN/BOSS
 const isHuntingProfile = (user) => userRoles(user).includes(WORKING_ROLE_HUNTING);
 
@@ -279,7 +280,7 @@ export const jobTicketPermissions = {
 
   canEdit: (user, ticket) => {
     // Admin can edit
-    if (hasAdminPrivileges(user) || user.role === ROLES.SUPER_ADMIN) {
+    if (hasAdminPrivileges(user) || isFullAdminRole(user.role, user.degree)) {
       return { canEdit: true };
     }
 
@@ -343,7 +344,7 @@ export const projectPermissions = {
 
     // Admin can edit based on env
     if (hasAdminPrivileges(user)) {
-      if (BOSS_CAN_EDIT_PROJECTS || user.role === ROLES.SUPER_ADMIN) {
+      if (BOSS_CAN_EDIT_PROJECTS || isFullAdminRole(user.role, user.degree)) {
         return { canEdit: true };
       }
     }
@@ -357,8 +358,8 @@ export const projectPermissions = {
       return true;
     }
 
-    // SUPER_ADMIN can delete
-    if (user.role === ROLES.SUPER_ADMIN) {
+    // SUPER_ADMIN / SYSTEM_ADMIN can delete
+    if (isFullAdminRole(user.role, user.degree)) {
       return true;
     }
 
@@ -427,7 +428,7 @@ export const taskPermissions = {
 export const interviewPermissions = {
   canView: (user, interview) => {
     // Admin can view all
-    if (hasAdminPrivileges(user) || user.role === ROLES.SUPER_ADMIN) {
+    if (hasAdminPrivileges(user) || isFullAdminRole(user.role, user.degree)) {
       return true;
     }
 
@@ -442,7 +443,7 @@ export const interviewPermissions = {
 
   canEdit: (user, interview) => {
     // Admin can edit
-    if (hasAdminPrivileges(user) || user.role === ROLES.SUPER_ADMIN) {
+    if (hasAdminPrivileges(user) || isFullAdminRole(user.role, user.degree)) {
       return { canEdit: true };
     }
 
@@ -456,7 +457,7 @@ export const interviewPermissions = {
 
   canDelete: (user, interview) => {
     // Admin can delete
-    if (hasAdminPrivileges(user) || user.role === ROLES.SUPER_ADMIN) {
+    if (hasAdminPrivileges(user) || isFullAdminRole(user.role, user.degree)) {
       return true;
     }
 
@@ -479,7 +480,10 @@ export const interviewPermissions = {
 
 /**
  * FinanceTransaction Permission Helpers
+ * SYSTEM_ADMIN ("Admin") may view finance but never change it.
  */
+const isFinanceReadOnly = (user) => !!user && isSystemAdminRole(user.role, user.degree);
+
 export const financeTransactionPermissions = {
   canView: (user, transaction) => {
     // Owner can view
@@ -488,7 +492,7 @@ export const financeTransactionPermissions = {
     }
 
     // Admin can view all
-    if (hasAdminPrivileges(user) || user.role === ROLES.SUPER_ADMIN) {
+    if (hasAdminPrivileges(user)) {
       return true;
     }
 
@@ -496,13 +500,14 @@ export const financeTransactionPermissions = {
   },
 
   canEdit: (user, transaction) => {
+    if (isFinanceReadOnly(user)) return { canEdit: false, reason: 'Finance is read-only for Admin' };
     // Owner can edit
     if (isOwner(user, transaction, 'userId')) {
       return { canEdit: true };
     }
 
     // Admin can edit
-    if (hasAdminPrivileges(user) || user.role === ROLES.SUPER_ADMIN) {
+    if (hasAdminPrivileges(user)) {
       return { canEdit: true };
     }
 
@@ -510,13 +515,14 @@ export const financeTransactionPermissions = {
   },
 
   canDelete: (user, transaction) => {
+    if (isFinanceReadOnly(user)) return false;
     // Owner can delete
     if (isOwner(user, transaction, 'userId')) {
       return true;
     }
 
     // Admin can delete
-    if (hasAdminPrivileges(user) || user.role === ROLES.SUPER_ADMIN) {
+    if (hasAdminPrivileges(user)) {
       return true;
     }
 
@@ -524,6 +530,7 @@ export const financeTransactionPermissions = {
   },
 
   canCreate: (user) => {
+    if (isFinanceReadOnly(user)) return false;
     // Members can create their own transactions
     return canCreate(user, {
       allowMember: true,
@@ -533,7 +540,8 @@ export const financeTransactionPermissions = {
 
   canApprove: (user, transaction) => {
     // Only admin can approve
-    return hasAdminPrivileges(user) || user.role === ROLES.SUPER_ADMIN;
+    if (isFinanceReadOnly(user)) return false;
+    return hasAdminPrivileges(user);
   }
 };
 
