@@ -15,7 +15,7 @@
         <!-- =====================
              DASHBOARD
         ====================== -->
-        <router-link v-if="!isFinanceManager" :to="{ name: 'Dashboard' }" class="nav-item">
+        <router-link :to="{ name: 'Dashboard' }" class="nav-item">
           <span class="group-icon" aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none">
               <path d="M3 10.5L12 3l9 7.5V21a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1v-10.5Z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -503,7 +503,7 @@ const userMenuOpen = ref(false);
 
 const isBadge = ref(false)
 const showActions = computed(() => isBadge.value)
-/** Finance manager: sidebar shows Finance and Summarize only. */
+/** Finance manager: sidebar shows Dashboard, Finance and Summarize only. */
 const isFinanceManager = computed(() =>
   isFinanceManagerRole(authStore.user?.role, authStore.user?.degree)
 );

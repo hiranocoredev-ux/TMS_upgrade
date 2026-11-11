@@ -297,7 +297,6 @@ import {
   NON_MEMBER_ROLES,
   ROLES,
   isSuperAdminRole,
-  isFullAdminRole,
   isNonMemberRole,
   normalizeRole,
 } from '../constants/roles.js';
@@ -766,11 +765,12 @@ export const getQuarterProfit = async (req, res, next) => {
 
     // The jackpot leaderboard is company-wide: every viewer sees ALL members
     // (across every group) — no per-viewer team scoping. Accounts without a
-    // group are left out, except that a super admin or admin viewer also sees
-    // admin and finance manager accounts, ranked and tagged with their role.
-    // Super admin accounts never appear. An explicit groupId filter is still honored.
-    const viewerIsFullAdmin = isFullAdminRole(req.user?.role, req.user?.degree);
-    const userQuery = viewerIsFullAdmin
+    // group are left out, except that a super admin, admin or finance manager
+    // viewer also sees admin and finance manager accounts, ranked and tagged with
+    // their role. Super admin accounts never appear. An explicit groupId filter
+    // is still honored.
+    const viewerSeesAdminAccounts = isNonMemberRole(req.user?.role, req.user?.degree);
+    const userQuery = viewerSeesAdminAccounts
       ? { role: { $ne: ROLES.SUPER_ADMIN } }
       : { role: { $nin: NON_MEMBER_ROLES } };
     if (groupId && groupId !== 'all') {

@@ -95,10 +95,11 @@ export const canManageAllFinance = (role, degree) =>
 export const GROUPLESS_ROLES = [ROLES.SUPER_ADMIN, ROLES.FINANCE_MANAGER, ROLES.SYSTEM_ADMIN];
 
 /**
- * Pages a finance manager may open: Finance, Summarize and their own profile.
- * Everything else sends them to Finance Overview.
+ * Pages a finance manager may open: Dashboard, Finance, Summarize and their own
+ * profile. Everything else sends them to Finance Overview.
  */
 export const FINANCE_MANAGER_ROUTE_NAMES = new Set([
+  'Dashboard',
   'FinanceOverview',
   'MonthlyPlansView',
   'PeriodicPlansView',

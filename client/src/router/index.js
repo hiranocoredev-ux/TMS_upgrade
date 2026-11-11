@@ -668,8 +668,8 @@ router.beforeEach((to, from, next) => {
     return;
   }
 
-  // Finance manager: only Finance, Summarize and their own profile. Anything
-  // else (including the Dashboard landing page) goes to Finance Overview.
+  // Finance manager: only Dashboard, Finance, Summarize and their own profile.
+  // Anything else goes to Finance Overview.
   if (isAuthenticated && to.meta.requiresAuth !== false) {
     let fmUser = store.state.auth.user;
     if (!fmUser && hasUser) {
