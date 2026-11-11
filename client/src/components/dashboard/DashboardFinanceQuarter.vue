@@ -109,7 +109,9 @@
           </div>
           <div class="cq__meta">
             <span class="cq__name" :title="u.name">{{ u.name }}</span>
-            <span class="cq__group" v-if="u.group">{{ u.group }}</span>
+            <!-- Shown to a super admin only: accounts without a group, tagged with their role. -->
+            <span v-if="u.adminAccount" class="cq__role" :title="`${u.roleLabel} account`">{{ u.roleLabel }}</span>
+            <span class="cq__group" v-else-if="u.group">{{ u.group }}</span>
           </div>
         </li>
       </ol>
@@ -512,6 +514,18 @@ onBeforeUnmount(() => {
 .cq__meta { display: flex; flex-direction: column; align-items: center; min-width: 0; }
 .cq__name { font-weight: 800; font-size: 0.82rem; color: #5c4306; max-width: 108px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cq__group { font-size: 0.68rem; color: #a3843c; }
+/* Super admin view: admin / finance manager accounts, tagged instead of a group. */
+.cq__role {
+  margin-top: 1px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #fff;
+  background: #8a6514;
+  white-space: nowrap;
+}
 
 @keyframes cq-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
 

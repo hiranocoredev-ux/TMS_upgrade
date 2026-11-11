@@ -293,7 +293,8 @@ import mongoose from 'mongoose';
 import { createErrorResponse, createSuccessResponse } from '../utils/errors.js';
 import { validateDateRange } from '../utils/financeHelpers.js';
 import { isCrossTeamFinanceOverviewViewer } from '../utils/financeTeamScope.js';
-import { NON_MEMBER_ROLES } from '../constants/roles.js';
+import { NON_MEMBER_ROLES, isSuperAdminRole, isNonMemberRole, normalizeRole } from '../constants/roles.js';
+import { getRoleDisplayName } from '../utils/roleMapper.js';
 import { withCountable } from '../utils/transactionReview.js';
 
 /* ======================================================
@@ -756,16 +757,19 @@ export const getQuarterProfit = async (req, res, next) => {
     const year = Number.parseInt(req.query.year, 10) || now.getUTCFullYear();
     const groupId = req.query.groupId;
 
-    // The jackpot leaderboard is company-wide: every viewer sees ALL users
-    // (across every group) except SUPER_ADMIN / FINANCE_MANAGER — no per-viewer
-    // team scoping. An explicit groupId filter is still honored if provided.
-    const userQuery = { role: { $nin: NON_MEMBER_ROLES } };
+    // The jackpot leaderboard is company-wide: every viewer sees ALL members
+    // (across every group) — no per-viewer team scoping. Accounts without a
+    // group (super admin, admin, finance manager) are left out, except for a
+    // super admin viewer, who also sees them, ranked and tagged with their role.
+    // An explicit groupId filter is still honored if provided.
+    const viewerIsSuperAdmin = isSuperAdminRole(req.user?.role, req.user?.degree);
+    const userQuery = viewerIsSuperAdmin ? {} : { role: { $nin: NON_MEMBER_ROLES } };
     if (groupId && groupId !== 'all') {
       userQuery.group = groupId;
     }
 
     const users = await User.find(userQuery)
-      .select('_id name email group avatarUrl')
+      .select('_id name email group avatarUrl role degree')
       .lean();
     const scopedUserIds = users.map((u) => u._id);
 
@@ -829,12 +833,17 @@ export const getQuarterProfit = async (req, res, next) => {
         quarters[q] = p;
         total += p;
       }
+      // Only present for a super admin viewer: a no-group account and its role name.
+      const adminAccount = isNonMemberRole(u.role, u.degree);
       return {
         userId: uid,
         name: u.name,
         email: u.email,
-        group: u.group || '',
+        group: adminAccount ? '' : u.group || '',
         avatarUrl: u.avatarUrl || '',
+        ...(adminAccount
+          ? { adminAccount: true, roleLabel: getRoleDisplayName(normalizeRole(u.role, u.degree)) }
+          : {}),
         quarters,
         total: Math.round(total * 100) / 100,
       };
