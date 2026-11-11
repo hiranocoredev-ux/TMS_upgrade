@@ -293,7 +293,7 @@ import mongoose from 'mongoose';
 import { createErrorResponse, createSuccessResponse } from '../utils/errors.js';
 import { validateDateRange } from '../utils/financeHelpers.js';
 import { isCrossTeamFinanceOverviewViewer } from '../utils/financeTeamScope.js';
-import { NON_MEMBER_ROLES, isSuperAdminRole, isNonMemberRole, normalizeRole } from '../constants/roles.js';
+import { NON_MEMBER_ROLES, ROLES, isSuperAdminRole, isNonMemberRole, normalizeRole } from '../constants/roles.js';
 import { getRoleDisplayName } from '../utils/roleMapper.js';
 import { withCountable } from '../utils/transactionReview.js';
 
@@ -759,18 +759,23 @@ export const getQuarterProfit = async (req, res, next) => {
 
     // The jackpot leaderboard is company-wide: every viewer sees ALL members
     // (across every group) — no per-viewer team scoping. Accounts without a
-    // group (super admin, admin, finance manager) are left out, except for a
-    // super admin viewer, who also sees them, ranked and tagged with their role.
-    // An explicit groupId filter is still honored if provided.
+    // group are left out, except that a super admin viewer also sees admin and
+    // finance manager accounts, ranked and tagged with their role. Super admin
+    // accounts never appear. An explicit groupId filter is still honored.
     const viewerIsSuperAdmin = isSuperAdminRole(req.user?.role, req.user?.degree);
-    const userQuery = viewerIsSuperAdmin ? {} : { role: { $nin: NON_MEMBER_ROLES } };
+    const userQuery = viewerIsSuperAdmin
+      ? { role: { $ne: ROLES.SUPER_ADMIN } }
+      : { role: { $nin: NON_MEMBER_ROLES } };
     if (groupId && groupId !== 'all') {
       userQuery.group = groupId;
     }
 
-    const users = await User.find(userQuery)
-      .select('_id name email group avatarUrl role degree')
-      .lean();
+    const users = (
+      await User.find(userQuery)
+        .select('_id name email group avatarUrl role degree')
+        .lean()
+    // Also drop older super admin accounts stored under a legacy role (TEAM_BOSS degree).
+    ).filter((u) => !isSuperAdminRole(u.role, u.degree));
     const scopedUserIds = users.map((u) => u._id);
 
     const yearSpan = yearRangeKeys(year);
