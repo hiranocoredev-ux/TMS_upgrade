@@ -293,7 +293,14 @@ import mongoose from 'mongoose';
 import { createErrorResponse, createSuccessResponse } from '../utils/errors.js';
 import { validateDateRange } from '../utils/financeHelpers.js';
 import { isCrossTeamFinanceOverviewViewer } from '../utils/financeTeamScope.js';
-import { NON_MEMBER_ROLES, ROLES, isSuperAdminRole, isNonMemberRole, normalizeRole } from '../constants/roles.js';
+import {
+  NON_MEMBER_ROLES,
+  ROLES,
+  isSuperAdminRole,
+  isFullAdminRole,
+  isNonMemberRole,
+  normalizeRole,
+} from '../constants/roles.js';
 import { getRoleDisplayName } from '../utils/roleMapper.js';
 import { withCountable } from '../utils/transactionReview.js';
 
@@ -759,11 +766,11 @@ export const getQuarterProfit = async (req, res, next) => {
 
     // The jackpot leaderboard is company-wide: every viewer sees ALL members
     // (across every group) — no per-viewer team scoping. Accounts without a
-    // group are left out, except that a super admin viewer also sees admin and
-    // finance manager accounts, ranked and tagged with their role. Super admin
-    // accounts never appear. An explicit groupId filter is still honored.
-    const viewerIsSuperAdmin = isSuperAdminRole(req.user?.role, req.user?.degree);
-    const userQuery = viewerIsSuperAdmin
+    // group are left out, except that a super admin or admin viewer also sees
+    // admin and finance manager accounts, ranked and tagged with their role.
+    // Super admin accounts never appear. An explicit groupId filter is still honored.
+    const viewerIsFullAdmin = isFullAdminRole(req.user?.role, req.user?.degree);
+    const userQuery = viewerIsFullAdmin
       ? { role: { $ne: ROLES.SUPER_ADMIN } }
       : { role: { $nin: NON_MEMBER_ROLES } };
     if (groupId && groupId !== 'all') {
