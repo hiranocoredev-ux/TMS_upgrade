@@ -38,11 +38,13 @@ import {
   isGlobalFinanceViewer,
   FINANCE_META_GROUPS,
 } from "../utils/financeTeamScope.js";
-import { isSuperAdminRole, canManageAllFinance, isSystemAdminRole, isFullAdminRole } from "../constants/roles.js";
+import { isSuperAdminRole, canManageAllFinance, isSystemAdminRole } from "../constants/roles.js";
 import {
   REVIEW,
   reviewStageOf,
   isLocked,
+  isReviewerFinanceManager,
+  isReviewerAdmin,
   isReviewer,
   changeBlockedReason,
   restartReviewFields,
@@ -822,10 +824,10 @@ router.put(
         transaction.userId = validatedData.userId;
       }
 
-      // Editing a rejected transaction resubmits it to the finance manager.
-      // (An approved one is locked, so it never gets here.)
+      // Approvals cover the data as it was; changing it sends the transaction
+      // back to the start of the review. Editing a rejected one resubmits it.
       const stageBefore = reviewStageOf(transaction);
-      if (!statusOnly && stageBefore === REVIEW.REJECTED) {
+      if (!statusOnly && (stageBefore === REVIEW.FM_APPROVED || stageBefore === REVIEW.REJECTED)) {
         Object.assign(transaction, restartReviewFields());
         transaction.reviewRejectReason = "";
         transaction.reviewRejectedByUserId = null;
@@ -1172,14 +1174,15 @@ router.post(
 );
 
 /* =====================================================================
-   Transaction review: the finance manager is the only approver, and their
-   approval is final (the transaction counts in totals and is locked).
-   See utils/transactionReview.js.
-   POST /finance/transactions/:id/review/approve   finance manager
-   POST /finance/transactions/:id/review/reject    finance manager, { reason }
-   POST /finance/transactions/:id/review/unlock    finance manager, { reason }
+   Two-step review: finance manager approves, then super admin approves
+   (which locks the transaction). A super admin's approval is final on its own,
+   so it may also come first. See utils/transactionReview.js.
+   POST /finance/transactions/:id/review/fm-approve      finance manager
+   POST /finance/transactions/:id/review/admin-approve   super admin (with or without FM)
+   POST /finance/transactions/:id/review/reject          either, { reason }
+   POST /finance/transactions/:id/review/unlock          super admin, { reason }
    Each step only applies while the transaction is at the expected stage, so
-   two clicks at once cannot both succeed.
+   two reviewers clicking at once cannot both succeed.
 ===================================================================== */
 const reviewReasonSchema = z.object({
   reason: z
@@ -1189,34 +1192,28 @@ const reviewReasonSchema = z.object({
     .max(MAX_REVIEW_REASON_LENGTH, `Reason must be at most ${MAX_REVIEW_REASON_LENGTH} characters`),
 });
 
-/**
- * Match transactions at one of `stages`. Transactions from before the review
- * count as awaiting the finance manager; the legacy fm_approved counts as approved.
- */
-const reviewStageFilter = (stages) => {
-  const stored = stages.includes(REVIEW.APPROVED) ? [...stages, REVIEW.FM_APPROVED] : stages;
-  return stages.includes(REVIEW.AWAITING_FM)
-    ? { $or: [{ reviewStage: { $in: stored } }, { reviewStage: { $exists: false } }, { reviewStage: null }] }
-    : { reviewStage: { $in: stored } };
-};
+/** Match transactions at one of `stages`; transactions from before the review count as awaiting FM. */
+const reviewStageFilter = (stages) =>
+  stages.includes(REVIEW.AWAITING_FM)
+    ? { $or: [{ reviewStage: { $in: stages } }, { reviewStage: { $exists: false } }, { reviewStage: null }] }
+    : { reviewStage: { $in: stages } };
 
 const REVIEW_STAGE_LABELS = {
   [REVIEW.AWAITING_FM]: "awaiting Finance Manager approval",
+  [REVIEW.FM_APPROVED]: "approved by the Finance Manager, awaiting Admin approval",
   [REVIEW.APPROVED]: "approved and locked",
   [REVIEW.REJECTED]: "rejected",
 };
 
-const REVIEWER_ONLY = "Only a Finance Manager can approve, reject or unlock transactions";
-
-const reviewRoute = ({ path, fromStages, needsReason, buildUpdate, auditAction, successMessage }) =>
+const reviewRoute = ({ path, allowed, deniedMessage, fromStages, needsReason, buildUpdate, auditAction, successMessage }) =>
   router.post(`/transactions/:id/review/${path}`, async (req, res, next) => {
     try {
       const { id } = req.params;
       if (!mongoose.isValidObjectId(id)) {
         return res.status(400).json(createErrorResponse("INVALID_ID", "Invalid transaction id", 400));
       }
-      if (!isReviewer(req.user)) {
-        return res.status(403).json(createErrorResponse("INSUFFICIENT_PERMISSIONS", REVIEWER_ONLY, 403));
+      if (!allowed(req.user)) {
+        return res.status(403).json(createErrorResponse("INSUFFICIENT_PERMISSIONS", deniedMessage, 403));
       }
       const reason = needsReason ? reviewReasonSchema.parse(req.body || {}).reason : "";
 
@@ -1261,26 +1258,47 @@ const reviewRoute = ({ path, fromStages, needsReason, buildUpdate, auditAction, 
   });
 
 reviewRoute({
-  path: "approve",
+  path: "fm-approve",
+  allowed: isReviewerFinanceManager,
+  deniedMessage: "Only a Finance Manager can give the first approval",
   fromStages: [REVIEW.AWAITING_FM],
   buildUpdate: (user, _reason, now) => ({
-    reviewStage: REVIEW.APPROVED,
+    reviewStage: REVIEW.FM_APPROVED,
     fmApprovedByUserId: user._id,
     fmApprovedAt: now,
   }),
   auditAction: "FINANCE_TRANSACTION_FM_APPROVE",
+  successMessage: "Approved by Finance Manager",
+});
+
+reviewRoute({
+  path: "admin-approve",
+  allowed: isReviewerAdmin,
+  deniedMessage: "Only a Super Admin can give the final approval",
+  // Final on its own: also allowed before the finance manager has approved.
+  fromStages: [REVIEW.AWAITING_FM, REVIEW.FM_APPROVED],
+  buildUpdate: (user, _reason, now) => ({
+    reviewStage: REVIEW.APPROVED,
+    adminApprovedByUserId: user._id,
+    adminApprovedAt: now,
+  }),
+  auditAction: "FINANCE_TRANSACTION_ADMIN_APPROVE",
   successMessage: "Approved and locked",
 });
 
 reviewRoute({
   path: "reject",
-  fromStages: [REVIEW.AWAITING_FM],
+  allowed: isReviewer,
+  deniedMessage: "Only a Finance Manager or Super Admin can reject",
+  fromStages: [REVIEW.AWAITING_FM, REVIEW.FM_APPROVED],
   needsReason: true,
   buildUpdate: (user, reason, now) => ({
     reviewStage: REVIEW.REJECTED,
     reviewRejectedByUserId: user._id,
     reviewRejectedAt: now,
     reviewRejectReason: reason,
+    fmApprovedByUserId: null,
+    fmApprovedAt: null,
   }),
   auditAction: "FINANCE_TRANSACTION_REVIEW_REJECT",
   successMessage: "Rejected — it can now be edited and resubmitted",
@@ -1288,6 +1306,8 @@ reviewRoute({
 
 reviewRoute({
   path: "unlock",
+  allowed: isReviewerAdmin,
+  deniedMessage: "Only a Super Admin can unlock a transaction",
   fromStages: [REVIEW.APPROVED],
   needsReason: true,
   buildUpdate: (user, reason, now) => ({
@@ -1748,10 +1768,10 @@ router.put("/goals", async (req, res, next) => {
     const { month } = req.query;
     const user = req.user;
 
-    if (isFullAdminRole(user.role, user.degree)) {
+    if (isSystemAdminRole(user.role, user.degree)) {
       return res
         .status(403)
-        .json(createErrorResponse("INSUFFICIENT_PERMISSIONS", "Finance is read-only for your role. Only a Finance Manager can make this change.", 403));
+        .json(createErrorResponse("INSUFFICIENT_PERMISSIONS", "Finance is read-only for the Admin role", 403));
     }
 
     if (!month) {
@@ -2255,8 +2275,8 @@ const overviewMembers = async (user, groupCode) => {
  *   editableGroup "<code>"   → that team only (its group boss)
  */
 const planEditScope = (user) => {
-  // Super admin and admin see every team's plans, but finance is read-only for them.
-  if (isFullAdminRole(user?.role, user?.degree)) return { canEdit: false, editableGroup: null };
+  // Admin sees every team's plans but finance is read-only for them.
+  if (isSystemAdminRole(user?.role, user?.degree)) return { canEdit: false, editableGroup: null };
   if (isGlobalFinanceViewer(user)) return { canEdit: true, editableGroup: null };
   const role = normalizeRole(user?.role, user?.degree);
   if (role === ROLES.GROUP_BOSS && user?.group) {

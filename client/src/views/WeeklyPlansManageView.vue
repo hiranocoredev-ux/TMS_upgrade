@@ -69,7 +69,7 @@
             <div class="left-section">
                 <div class="section-header">
                     <h2>Weeks</h2>
-                    <button v-if="managesAllFinance" @click="showCreatePeriodModal = true" class="btn-primary btn-small">
+                    <button v-if="isSuperAdmin" @click="showCreatePeriodModal = true" class="btn-primary btn-small">
                         + Create Week
                     </button>
                 </div>
@@ -83,7 +83,7 @@
                     >
                         <div class="period-header">
                             <div class="period-name">{{ period.definition }}</div>
-                            <div v-if="managesAllFinance" class="period-actions" @click.stop>
+                            <div v-if="isSuperAdmin" class="period-actions" @click.stop>
                                 <button
                                     class="btn-icon"
                                     @click.stop="openEditPeriodModal(period)"
@@ -267,17 +267,17 @@ const authStore = useAuthStore();
 
 /** Super admin, finance manager or group boss: may create / edit week plans (group boss: own group only). */
 const isBoss = computed(() => isFinanceManagerUser(authStore.user));
-/** Weeks themselves are created / edited by the finance manager only. */
-const managesAllFinance = computed(() => canManageAllFinance(authStore.user?.role, authStore.user?.degree));
+/** Weeks themselves are created / edited by super admin or finance manager. */
+const isSuperAdmin = computed(() => canManageAllFinance(authStore.user?.role, authStore.user?.degree));
 // Every user can browse week plans of all groups.
 const showGroupFilter = computed(() => true);
 
 const planUserGroup = (plan) => (typeof plan.userId === 'object' ? plan.userId?.group : null);
 
-/** Finance manager edits any plan; a group boss only plans of their own group (server enforces the same). */
+/** Super admin edits any plan; a group boss only plans of their own group (server enforces the same). */
 const canEditPlan = (plan) => {
     if (!isBoss.value) return false;
-    if (managesAllFinance.value || isGlobalFinanceViewerUser(authStore.user)) return true;
+    if (isSuperAdmin.value || isGlobalFinanceViewerUser(authStore.user)) return true;
     return !!authStore.user?.group && planUserGroup(plan) === authStore.user.group;
 };
 

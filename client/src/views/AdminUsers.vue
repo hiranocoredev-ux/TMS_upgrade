@@ -168,6 +168,12 @@
                 </select>
               </div>
             </div>
+            <div v-if="isSuperAdmin" class="form-group">
+              <label>
+                <input v-model="form.paymentRequestApprover" type="checkbox" />
+                Payment request approver (may accept/reject group-boss payment requests to the platform)
+              </label>
+            </div>
             <div v-if="!isFormSuperAdmin" class="form-group">
               <label>Working Role <span class="form-label-hint">one per member</span></label>
               <div class="wr-chips">

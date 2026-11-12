@@ -106,12 +106,9 @@ export const isFinanceManagerRole = (role, degree) =>
 export const isNonMemberRole = (role, degree) =>
   NON_MEMBER_ROLES.includes(normalizeRole(role, degree));
 
-/**
- * Manages finance for every team: the finance manager only. Super admin and
- * admin see all finance read-only; a group boss manages their own group's.
- */
+/** Sees and manages finance for every team: super admin or finance manager (not admin). */
 export const canManageAllFinance = (role, degree) =>
-  normalizeRole(role, degree) === ROLES.FINANCE_MANAGER;
+  [ROLES.SUPER_ADMIN, ROLES.FINANCE_MANAGER].includes(normalizeRole(role, degree));
 
 /** Sees finance for every team: super admin, finance manager, or admin (read-only). */
 export const canViewAllFinance = (role, degree) =>
