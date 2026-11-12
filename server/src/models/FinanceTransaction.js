@@ -115,12 +115,13 @@ const financeTransactionSchema = new mongoose.Schema({
   },
 
   /*
-   * Two-step review (see utils/transactionReview.js):
-   *   awaiting_fm -> (finance manager approves) fm_approved
-   *               -> (super admin approves)     approved = locked
-   *   either reviewer may reject -> rejected (editable again; saving resubmits)
-   * No default on purpose: transactions created before the review existed have
-   * no stage and are treated as awaiting Finance Manager approval.
+   * Review by a finance manager or super admin (see utils/transactionReview.js):
+   *   awaiting_fm -> (either approves) approved = counted everywhere & locked
+   *   awaiting_fm -> (either rejects)  rejected (editable; saving resubmits)
+   *   approved    -> (either unlocks)  awaiting_fm
+   * fm_approved is left over from the former two-step review and is treated as
+   * approved. No default on purpose: transactions created before the review
+   * existed have no stage and are treated as awaiting approval.
    */
   reviewStage: {
     type: String,

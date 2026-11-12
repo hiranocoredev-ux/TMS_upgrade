@@ -158,9 +158,8 @@ export const rejectTransaction = async (id, reason = '') => {
 /**
  * Two-step review action on a transaction.
  * @param {string} id - Transaction ID
- * @param {'fm-approve'|'admin-approve'|'reject'|'unlock'} action
- *   fm-approve: finance manager · admin-approve: super admin (locks) ·
- *   reject: either (reason required) · unlock: super admin (reason required)
+ * @param {'approve'|'reject'|'unlock'} action - finance manager or super admin:
+ *   approve (final: counts everywhere and locks) · reject (reason required) · unlock (reason required)
  * @param {string} [reason]
  * @returns {Promise<ApiResponse>} { ok: true, data: { transaction } }
  */

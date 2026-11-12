@@ -115,19 +115,12 @@
             </div>
             <div v-if="hasReviewActions(transaction)" class="review-actions">
               <button
-                v-if="reviewActionsFor(transaction, currentUser).fmApprove"
+                v-if="reviewActionsFor(transaction, currentUser).approve"
                 type="button"
                 class="btn-review btn-review--approve"
                 :disabled="busyId === transaction._id"
-                @click="runReview(transaction, 'fm-approve')"
+                @click="runReview(transaction, 'approve')"
               >Approve</button>
-              <button
-                v-if="reviewActionsFor(transaction, currentUser).adminApprove"
-                type="button"
-                class="btn-review btn-review--approve"
-                :disabled="busyId === transaction._id"
-                @click="runReview(transaction, 'admin-approve')"
-              >Final approve</button>
               <button
                 v-if="reviewActionsFor(transaction, currentUser).reject"
                 type="button"
@@ -197,9 +190,7 @@ import {
   canEditTransaction,
   canChangeStatus,
   lockedMessage,
-  countsInTotals,
-  reviewStageOf,
-  REVIEW
+  countsInTotals
 } from '../../utils/transactionReview';
 
 const props = defineProps({
@@ -228,14 +219,9 @@ const busyId = ref('');
 const hasReviewActions = (t) => Object.values(reviewActionsFor(t, currentUser.value)).some(Boolean);
 
 const REVIEW_PROMPTS = {
-  'fm-approve': { confirm: 'Approve this transaction as Finance Manager? It then goes to the Admin for final approval.' },
-  'admin-approve': {
-    confirm: 'Give final approval? The transaction will count in all reports and be locked — no more edits or deletion.',
-    confirmWithoutFm:
-      'The Finance Manager has not approved this yet. Approve it as Super Admin anyway? Your approval is final: it will count in all reports and be locked.'
-  },
+  approve: { confirm: 'Approve this transaction? It will count in all reports and be locked — no more edits or deletion until it is unlocked.' },
   reject: { reason: 'Why is this transaction rejected? (The creator sees this and can fix and resubmit it.)' },
-  unlock: { reason: 'Why unlock this approved transaction? It will need Finance Manager and Admin approval again.' }
+  unlock: { reason: 'Why unlock this approved transaction? It will stop counting in reports until it is approved again.' }
 };
 
 const runReview = async (transaction, action) => {
@@ -249,9 +235,8 @@ const runReview = async (transaction, action) => {
       window.alert('A reason is required.');
       return;
     }
-  } else {
-    const skipsFm = action === 'admin-approve' && reviewStageOf(transaction) === REVIEW.AWAITING_FM;
-    if (!window.confirm(skipsFm ? prompts.confirmWithoutFm : prompts.confirm)) return;
+  } else if (!window.confirm(prompts.confirm)) {
+    return;
   }
   busyId.value = transaction._id;
   try {
