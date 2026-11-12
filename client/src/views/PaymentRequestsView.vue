@@ -2,24 +2,23 @@
 import { ref, computed, watch } from 'vue';
 import { useToast } from 'vue-toastification';
 import { useAuthStore } from '../composables/useAuth';
-import { normalizeRole, ROLES, canManageAllFinance, canViewAllFinance } from '../constants/roles';
+import { normalizeRole, ROLES, canViewAllFinance, isFullAdminRole } from '../constants/roles';
 import * as financeApi from '../services/finance';
 
 const toast = useToast();
 const authStore = useAuthStore();
 
 const role = computed(() => normalizeRole(authStore.user?.role, authStore.user?.degree));
-const isSuperAdmin = computed(() => role.value === ROLES.SUPER_ADMIN);
 const isGroupBoss = computed(() => role.value === ROLES.GROUP_BOSS);
 const isGroupMember = computed(() => role.value === ROLES.GROUP_MEMBER);
-/** Super admin and finance manager handle boss → platform requests, as do flagged approvers. */
-const handlesAllFinance = computed(() => canManageAllFinance(authStore.user?.role, authStore.user?.degree));
-/** Admin (SYSTEM_ADMIN): views every request read-only (platform inbox), never handles or submits. */
-const isReadOnlyAdmin = computed(() => role.value === ROLES.SYSTEM_ADMIN);
+/**
+ * Super admin and admin view every request read-only (platform inbox), never
+ * handle or submit. Boss → platform requests are handled by a finance manager;
+ * member → boss requests by the group boss.
+ */
+const isReadOnlyAdmin = computed(() => isFullAdminRole(authStore.user?.role, authStore.user?.degree));
 const viewsAllFinance = computed(() => canViewAllFinance(authStore.user?.role, authStore.user?.degree));
-const canUsePlatformInbox = computed(
-  () => viewsAllFinance.value || authStore.user?.paymentRequestApprover === true,
-);
+const canUsePlatformInbox = computed(() => viewsAllFinance.value);
 /** May change a request status (Review button). */
 const canHandleRequests = computed(() => !isReadOnlyAdmin.value);
 
@@ -46,13 +45,13 @@ const canSubmit = computed(() => isGroupMember.value || isGroupBoss.value);
 
 const flowHint = computed(() => {
   if (isGroupMember.value) return 'Sent to your group boss for review.';
-  if (isGroupBoss.value) return 'Sent to super admin or payment approvers.';
+  if (isGroupBoss.value) return 'Sent to the Finance Manager for review.';
   return '';
 });
 
 const tabs = computed(() => {
   const t = [];
-  // Super admin and finance manager handle requests (Admin only views them); they don't submit any.
+  // Finance manager handles requests (super admin and admin only view them); none of them submit any.
   if (!viewsAllFinance.value) {
     t.push({ key: 'my', label: 'My requests', scope: 'my', desc: 'Your submissions' });
   }

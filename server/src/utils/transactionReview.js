@@ -1,43 +1,46 @@
 /**
- * Two-step transaction review: a finance manager approves first, then a super
- * admin gives final approval, which locks the transaction.
+ * Transaction review: the finance manager is the only approver, and their
+ * approval is final — the transaction counts in totals and is locked.
  *
- *   awaiting_fm --(finance manager approves)--> fm_approved
- *   fm_approved --(super admin approves)------> approved   (locked)
- *   awaiting_fm --(super admin approves)------> approved   (locked; FM step skipped —
- *                                               the super admin's approval is final)
- *   awaiting_fm / fm_approved --(either rejects, with reason)--> rejected
- *   rejected --(creator or a finance manager / super admin saves an edit)--> awaiting_fm
- *   approved --(super admin unlocks, with reason)--> awaiting_fm
+ *   awaiting_fm --(finance manager approves)----------------> approved (locked)
+ *   awaiting_fm --(finance manager rejects, with reason)----> rejected
+ *   rejected    --(creator or a finance manager saves an edit)--> awaiting_fm
+ *   approved    --(finance manager unlocks, with reason)----> awaiting_fm
  *
- * Totals are unaffected: they still follow the Accepted / Pending / Canceled status.
- * Transactions created before the review existed have no stage: they wait for
- * Finance Manager approval like new ones.
+ * Super admin and admin see finance read-only and take no part. Transactions
+ * created before the review existed have no stage: they wait for the finance
+ * manager like new ones. `fm_approved` is left over from the former two-step
+ * review (finance manager, then super admin); with the finance manager's
+ * approval now final, it is treated exactly like `approved`.
  */
 import { normalizeRole, ROLES } from '../constants/roles.js';
 
 export const REVIEW = Object.freeze({
   AWAITING_FM: 'awaiting_fm',
+  /** Legacy (two-step review): treated as approved. */
   FM_APPROVED: 'fm_approved',
   APPROVED: 'approved',
   REJECTED: 'rejected',
 });
 
-const UNDER_REVIEW = [REVIEW.AWAITING_FM, REVIEW.FM_APPROVED];
+/** Stages that mean approved & locked (the legacy fm_approved included). */
+export const APPROVED_STAGES = [REVIEW.APPROVED, REVIEW.FM_APPROVED];
 
-/** Stage of a transaction; older ones without a stage are awaiting the Finance Manager. */
-export const reviewStageOf = (tx) => tx?.reviewStage || REVIEW.AWAITING_FM;
+/** Stage of a transaction; older ones without a stage are awaiting the finance manager. */
+export const reviewStageOf = (tx) => {
+  const stage = tx?.reviewStage || REVIEW.AWAITING_FM;
+  return stage === REVIEW.FM_APPROVED ? REVIEW.APPROVED : stage;
+};
 
 export const isLocked = (tx) => reviewStageOf(tx) === REVIEW.APPROVED;
 
 const roleOf = (user) => normalizeRole(user?.role, user?.degree);
-export const isReviewerFinanceManager = (user) => roleOf(user) === ROLES.FINANCE_MANAGER;
-export const isReviewerAdmin = (user) => roleOf(user) === ROLES.SUPER_ADMIN;
-export const isReviewer = (user) => isReviewerFinanceManager(user) || isReviewerAdmin(user);
+/** The only reviewer: a finance manager. */
+export const isReviewer = (user) => roleOf(user) === ROLES.FINANCE_MANAGER;
 
-/** A group boss's submission is frozen while it is under review. */
+/** A group boss's submission is frozen while it waits for the finance manager. */
 export const isFrozenSubmission = (tx) =>
-  tx?.createdByRole === ROLES.GROUP_BOSS && UNDER_REVIEW.includes(reviewStageOf(tx));
+  tx?.createdByRole === ROLES.GROUP_BOSS && reviewStageOf(tx) === REVIEW.AWAITING_FM;
 
 /**
  * Why `user` may not edit / delete this transaction right now, or null if they may.
@@ -46,12 +49,12 @@ export const isFrozenSubmission = (tx) =>
  */
 export function changeBlockedReason(tx, user, action = 'edit') {
   if (isLocked(tx)) {
-    return 'This transaction is approved and locked. A Super Admin must unlock it first.';
+    return 'This transaction is approved and locked. A Finance Manager must unlock it first.';
   }
   if (isFrozenSubmission(tx)) {
-    // Reviewers may still mark a frozen submission Accepted / Canceled; nobody edits its details.
+    // The finance manager may still mark a frozen submission Accepted / Canceled; nobody edits its details.
     if (action === 'status' && isReviewer(user)) return null;
-    return 'This transaction was submitted by a group boss and is under review. It can be changed only after a Finance Manager or Admin rejects it.';
+    return 'This transaction was submitted by a group boss and is waiting for the Finance Manager. It can be changed only after the Finance Manager rejects it.';
   }
   return null;
 }
@@ -59,12 +62,11 @@ export function changeBlockedReason(tx, user, action = 'edit') {
 /** Which review buttons `user` gets for this transaction. */
 export function reviewActionsFor(tx, user) {
   const stage = reviewStageOf(tx);
+  const fm = isReviewer(user);
   return {
-    fmApprove: stage === REVIEW.AWAITING_FM && isReviewerFinanceManager(user),
-    // A super admin's approval is final, with or without the finance manager's.
-    adminApprove: UNDER_REVIEW.includes(stage) && isReviewerAdmin(user),
-    reject: UNDER_REVIEW.includes(stage) && isReviewer(user),
-    unlock: stage === REVIEW.APPROVED && isReviewerAdmin(user),
+    approve: stage === REVIEW.AWAITING_FM && fm,
+    reject: stage === REVIEW.AWAITING_FM && fm,
+    unlock: stage === REVIEW.APPROVED && fm,
   };
 }
 
@@ -82,9 +84,9 @@ export const MAX_REVIEW_REASON_LENGTH = 1000;
 /*
  * Which transactions count in totals (summaries, overview, dashboard, reports,
  * competition): everything created before APPROVAL_REQUIRED_FROM counts as it
- * always has; anything created from then on counts only once fully approved
- * (finance manager + super admin). The usual Accepted / Canceled rules still
- * apply on top. Override the cut-off with FINANCE_APPROVAL_REQUIRED_FROM (ISO date).
+ * always has; anything created from then on counts only once approved by the
+ * finance manager. The usual Accepted / Canceled rules still apply on top.
+ * Override the cut-off with FINANCE_APPROVAL_REQUIRED_FROM (ISO date).
  */
 const DEFAULT_APPROVAL_REQUIRED_FROM = '2026-11-08T22:30:00.000Z';
 const parsedCutoff = new Date(process.env.FINANCE_APPROVAL_REQUIRED_FROM || DEFAULT_APPROVAL_REQUIRED_FROM);
@@ -94,7 +96,7 @@ export const APPROVAL_REQUIRED_FROM = Number.isNaN(parsedCutoff.getTime())
 
 /** Mongo condition: the transaction counts in totals. */
 export const countableCondition = () => ({
-  $or: [{ createdAt: { $lt: APPROVAL_REQUIRED_FROM } }, { reviewStage: REVIEW.APPROVED }],
+  $or: [{ createdAt: { $lt: APPROVAL_REQUIRED_FROM } }, { reviewStage: { $in: APPROVED_STAGES } }],
 });
 
 /** `match` narrowed to transactions that count in totals (safe even if `match` has its own $or). */

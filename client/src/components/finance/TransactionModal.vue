@@ -15,9 +15,6 @@
           <strong>Rejected:</strong> {{ rejectedNote }}<br />
           Fix it and save to resubmit it for approval.
         </p>
-        <p v-else-if="isEdit && wasFmApproved" class="review-banner" role="status">
-          Approved by the Finance Manager. Saving changes sends it back for Finance Manager approval.
-        </p>
 
         <!-- User (only show when editing or if no selectedUserId) -->
         <div v-if="isEdit || !selectedUserId" class="form-group">
@@ -247,7 +244,7 @@ const urlError = ref('');
 
 const isEdit = computed(() => !!props.transaction);
 
-/* Two-step review state of the transaction being edited. */
+/* Review state of the transaction being edited. */
 const blockedMessage = computed(() => (props.transaction ? lockedMessage(props.transaction) : ''));
 const rejectedNote = computed(() => {
   const t = props.transaction;
@@ -255,7 +252,6 @@ const rejectedNote = computed(() => {
   const by = t.reviewRejectedByUserId && typeof t.reviewRejectedByUserId === 'object' ? t.reviewRejectedByUserId.name : '';
   return `${t.reviewRejectReason || 'No reason given'}${by ? ` (${by})` : ''}`;
 });
-const wasFmApproved = computed(() => !!props.transaction && reviewStageOf(props.transaction) === REVIEW.FM_APPROVED);
 
 const form = ref({
   userId: '',

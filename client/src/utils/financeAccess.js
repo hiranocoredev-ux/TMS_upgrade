@@ -10,14 +10,14 @@ export function isGlobalFinanceViewerUser(user) {
 }
 
 /**
- * Matches server finance manager routes (super admin, group boss or finance
- * manager; legacy TEAM_BOSS degree maps to super admin). Admin (SYSTEM_ADMIN) is
- * finance read-only, so this is false for them (gates finance write buttons).
+ * Matches server finance write routes: group boss (own group) or finance manager
+ * (every team). Super admin and admin see finance read-only, so this is false for
+ * them (gates finance write buttons).
  */
 export function isFinanceManagerUser(user) {
   if (!user) return false;
   const r = normalizeRole(user.role, user.degree);
-  return r === ROLES.SUPER_ADMIN || r === ROLES.GROUP_BOSS || r === ROLES.FINANCE_MANAGER;
+  return r === ROLES.GROUP_BOSS || r === ROLES.FINANCE_MANAGER;
 }
 
 /** Params for GET /admin/users when building finance member pickers. */

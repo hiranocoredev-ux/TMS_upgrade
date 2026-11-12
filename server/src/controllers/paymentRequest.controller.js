@@ -4,22 +4,19 @@ import PaymentRequest, {
   PAYMENT_REQUEST_FLOW,
   PAYMENT_REQUEST_STATUS,
 } from '../models/PaymentRequest.js';
-import { normalizeRole, ROLES, canManageAllFinance } from '../constants/roles.js';
+import { normalizeRole, ROLES, canManageAllFinance, isFullAdminRole } from '../constants/roles.js';
 import { createErrorResponse, createSuccessResponse } from '../utils/errors.js';
 
 const isSuperAdmin = (u) => normalizeRole(u?.role, u?.degree) === ROLES.SUPER_ADMIN;
 const isGroupBoss = (u) => normalizeRole(u?.role, u?.degree) === ROLES.GROUP_BOSS;
 
 /**
- * Super admin, finance manager, or users flagged as payment request reviewers
- * (set by super admin).
+ * Group boss → platform payment requests are handled by a finance manager only.
+ * (The former "payment request approver" flag on a user no longer applies.)
  */
 export const canHandleBossToPlatformRequests = (u) => {
   if (!u) return false;
-  if (canManageAllFinance(u.role, u.degree)) return true;
-  // Finance is read-only for the admin role, approver flag or not.
-  if (normalizeRole(u.role, u.degree) === ROLES.SYSTEM_ADMIN) return false;
-  return u.paymentRequestApprover === true;
+  return canManageAllFinance(u.role, u.degree);
 };
 
 const createSchema = z.object({
@@ -226,8 +223,8 @@ export const listPaymentRequests = async (req, res, next) => {
       query.group = g;
       query.requesterId = { $ne: req.user._id };
     } else if (scope === 'platform_inbox') {
-      // Admin may look (finance is read-only for them); handling still needs canHandleBossToPlatformRequests.
-      if (!canHandleBossToPlatformRequests(req.user) && role !== ROLES.SYSTEM_ADMIN) {
+      // Super admin and admin may look (finance is read-only for them); handling still needs canHandleBossToPlatformRequests.
+      if (!canHandleBossToPlatformRequests(req.user) && !isFullAdminRole(req.user.role, req.user.degree)) {
         return res.status(403).json(createErrorResponse('FORBIDDEN', 'Not allowed to view platform inbox', 403));
       }
       query.flowType = PAYMENT_REQUEST_FLOW.BOSS_TO_PLATFORM;

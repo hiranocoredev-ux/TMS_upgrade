@@ -186,8 +186,8 @@ const save = async () => {
 /* Load users */
 
 const authStore = useAuthStore();
-/** Super admin or finance manager: may plan for every team. */
-const isSuperAdmin = computed(() => canManageAllFinance(authStore.user?.role, authStore.user?.degree));
+/** Finance manager: may plan for every team. */
+const managesAllFinance = computed(() => canManageAllFinance(authStore.user?.role, authStore.user?.degree));
 /** Admin (SYSTEM_ADMIN): finance read-only, so the modal never saves. */
 const isReadOnlyAdmin = computed(() => isSystemAdminRole(authStore.user?.role, authStore.user?.degree));
 
@@ -199,11 +199,11 @@ const isReadOnlyAdmin = computed(() => isSystemAdminRole(authStore.user?.role, a
 const loadUsers = async () => {
   try {
     const ownGroup = authStore.user?.group;
-    if (!isSuperAdmin.value && !ownGroup) {
+    if (!managesAllFinance.value && !ownGroup) {
       users.value = [];
       return;
     }
-    const response = await fetchUsers(isSuperAdmin.value ? { limit: 1000 } : { limit: 1000, group: ownGroup });
+    const response = await fetchUsers(managesAllFinance.value ? { limit: 1000 } : { limit: 1000, group: ownGroup });
     if (response.ok && response.data) {
       users.value = excludeSuperAdmin(response.data.users || []);
       if (!isEditing.value && !formData.value.userId && !props.defaultUserId && users.value.length > 0) {

@@ -87,9 +87,12 @@ export const canViewAllFinance = (role, degree) =>
     normalizeRole(role, degree)
   );
 
-/** Sees and manages finance for every team: super admin or finance manager. */
+/**
+ * Manages finance for every team: the finance manager only. Super admin and
+ * admin see all finance read-only; a group boss manages their own group's.
+ */
 export const canManageAllFinance = (role, degree) =>
-  [ROLES.SUPER_ADMIN, ROLES.FINANCE_MANAGER].includes(normalizeRole(role, degree));
+  normalizeRole(role, degree) === ROLES.FINANCE_MANAGER;
 
 /** Roles that belong to no group (no group picker in User Management). */
 export const GROUPLESS_ROLES = [ROLES.SUPER_ADMIN, ROLES.FINANCE_MANAGER, ROLES.SYSTEM_ADMIN];

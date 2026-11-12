@@ -8,6 +8,7 @@ import {
   ROLES,
   isFinanceManagerRole,
   isSystemAdminRole,
+  isFullAdminRole,
   canManageAllFinance,
 } from '../constants/roles.js';
 
@@ -104,7 +105,7 @@ export const requireRole = (...roles) => {
   };
 };
 
-const FINANCE_READ_ONLY = 'Finance is read-only for the Admin role';
+const FINANCE_READ_ONLY = 'Finance is read-only for your role. Only a Finance Manager can make this change.';
 
 /** Strictly the super admin (not admin): protected accounts, database backup / restore. */
 export const requireSuperAdmin = (req, res, next) => {
@@ -115,7 +116,7 @@ export const requireSuperAdmin = (req, res, next) => {
   return res.status(403).json(createErrorResponse('INSUFFICIENT_PERMISSIONS', 'Only a Super Admin can do this'));
 };
 
-/** Finance changes that only super admin or finance manager may make (e.g. week periods). */
+/** Finance changes for every team that only a finance manager may make (e.g. week periods). */
 export const requireFinanceWriter = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json(createErrorResponse('AUTH_REQUIRED', 'Authentication required'));
@@ -123,14 +124,14 @@ export const requireFinanceWriter = (req, res, next) => {
   if (canManageAllFinance(req.user.role, req.user.degree)) return next();
   return res.status(403).json(createErrorResponse(
     'INSUFFICIENT_PERMISSIONS',
-    isSystemAdminRole(req.user.role, req.user.degree) ? FINANCE_READ_ONLY : 'Insufficient permissions'
+    isFullAdminRole(req.user.role, req.user.degree) ? FINANCE_READ_ONLY : 'Insufficient permissions'
   ));
 };
 
 /**
- * Finance create/update/delete/approve: super admin, group boss (legacy ADMIN/BOSS /
- * TEAM_BOSS degree included) or finance manager. Never the admin role: finance is
- * read-only for them.
+ * Finance create/update/delete: a group boss (their own group; legacy ADMIN/BOSS
+ * included) or a finance manager (every team). Super admin and admin see finance
+ * read-only and are refused.
  */
 export const requireFinanceManager = (req, res, next) => {
   if (!req.user) {
@@ -139,7 +140,7 @@ export const requireFinanceManager = (req, res, next) => {
       'Authentication required'
     ));
   }
-  if (isSystemAdminRole(req.user.role, req.user.degree)) {
+  if (isFullAdminRole(req.user.role, req.user.degree)) {
     return res.status(403).json(createErrorResponse('INSUFFICIENT_PERMISSIONS', FINANCE_READ_ONLY));
   }
   if (hasAdminPrivileges(req.user) || isFinanceManagerRole(req.user.role, req.user.degree)) {
