@@ -1064,7 +1064,13 @@ export const triggerFinalSync = async (req, res) => {
 
     const hubSyncApiUrl = process.env.HUB_SYNC_API_URL;
     if (!hubSyncApiUrl) {
-      return res.status(500).json({ ok: false, message: 'HUB_SYNC_API_URL is not configured' });
+      // A setup problem, not a crash: say exactly what to add (server/.env is not in git).
+      return res.status(500).json({
+        ok: false,
+        message:
+          'Final Update is not set up on this server: add HUB_SYNC_API_URL to server/.env ' +
+          '(e.g. http://127.0.0.1:5001/sync-date — the address of the Hubstaff hub) and restart the server.',
+      });
     }
 
     const timeoutMs = Number(process.env.HUB_SYNC_TIMEOUT_MS || 120000);

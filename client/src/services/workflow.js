@@ -46,5 +46,6 @@ export const upsertWorktimeHubstaffId = (payload) =>
 export const getWorkflowFinalSyncStatus = (date) =>
   apiClient.get('/workflow/final-sync-status', { params: { date } });
 
+// The page shows its own success message, so skip the generic one.
 export const triggerWorkflowFinalSync = (date) =>
-  apiClient.post('/workflow/final-sync', { date });
+  apiClient.post('/workflow/final-sync', { date }, { silentSuccess: true });

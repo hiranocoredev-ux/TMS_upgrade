@@ -1011,8 +1011,8 @@ const runFinalSync = async () => {
     finalSyncConfirmed.value = true;
     await fetchChart();
     toast.success('Final update completed and graph refreshed.');
-  } catch (err) {
-    toast.error(err.response?.data?.message || err.message || 'Final update failed');
+  } catch {
+    // The API client already shows the error message (showing it here too doubled it).
   } finally {
     finalSyncLoading.value = false;
   }
