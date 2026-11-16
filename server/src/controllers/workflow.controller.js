@@ -1052,6 +1052,9 @@ export const getFinalSyncStatus = async (req, res) => {
   }
 };
 
+/** The Hubstaff hub's sync route when HUB_SYNC_API_URL is not set: `flask run` (5000), then `python app.py` (5001). */
+const DEFAULT_HUB_SYNC_URLS = ['http://127.0.0.1:5000/sync-date', 'http://127.0.0.1:5001/sync-date'];
+
 export const triggerFinalSync = async (req, res) => {
   try {
     const { date } = req.body;
@@ -1062,41 +1065,46 @@ export const triggerFinalSync = async (req, res) => {
       return res.status(400).json({ ok: false, message: 'Final update is not available for today' });
     }
 
-    const hubSyncApiUrl = process.env.HUB_SYNC_API_URL;
-    if (!hubSyncApiUrl) {
-      // A setup problem, not a crash: say exactly what to add (server/.env is not in git).
-      return res.status(500).json({
-        ok: false,
-        message:
-          'Final Update is not set up on this server: add HUB_SYNC_API_URL to server/.env ' +
-          '(e.g. http://127.0.0.1:5001/sync-date — the address of the Hubstaff hub) and restart the server.',
-      });
+    // Where the Hubstaff hub listens. HUB_SYNC_API_URL in server/.env wins; without
+    // it, try the hub's usual addresses: `flask run` / Docker use port 5000,
+    // `python app.py` uses 5001 (server/.env is not in git, so a fresh copy has no setting).
+    const configured = String(process.env.HUB_SYNC_API_URL || '').trim();
+    const candidates = configured ? [configured] : DEFAULT_HUB_SYNC_URLS;
+    const timeoutMs = Number(process.env.HUB_SYNC_TIMEOUT_MS || 120000);
+
+    let synced = false;
+    let lastProblem = '';
+    for (const hubSyncApiUrl of candidates) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const endpoint = `${hubSyncApiUrl}${hubSyncApiUrl.includes('?') ? '&' : '?'}date=${encodeURIComponent(date)}`;
+        const response = await fetch(endpoint, { method: 'POST', signal: controller.signal });
+        if (response.ok) {
+          synced = true;
+          break;
+        }
+        // Something answered but it is not the hub's sync route (e.g. another app on that port): try the next.
+        lastProblem = `${hubSyncApiUrl} answered with status ${response.status}`;
+        if (configured) break;
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          // The hub was reached but the Hubstaff sync took too long; trying another port would not help.
+          return res.status(504).json({ ok: false, message: 'Hub sync timed out' });
+        }
+        lastProblem = `${hubSyncApiUrl} did not answer (${err.cause?.code || err.message})`;
+      } finally {
+        clearTimeout(timeoutId);
+      }
     }
 
-    const timeoutMs = Number(process.env.HUB_SYNC_TIMEOUT_MS || 120000);
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-    try {
-      const endpoint = `${hubSyncApiUrl}${hubSyncApiUrl.includes('?') ? '&' : '?'}date=${encodeURIComponent(date)}`;
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        signal: controller.signal,
+    if (!synced) {
+      return res.status(502).json({
+        ok: false,
+        message: configured
+          ? `Could not run the Hubstaff hub sync: ${lastProblem}. Check that the hub is running at that address (HUB_SYNC_API_URL in server/.env).`
+          : `Could not reach the Hubstaff hub on port 5000 or 5001 (${lastProblem}). Start the hub ("flask run" in the hub folder), or set HUB_SYNC_API_URL in server/.env to its address and restart the server.`,
       });
-
-      if (!response.ok) {
-        return res.status(502).json({
-          ok: false,
-          message: `Hub sync failed with status ${response.status}`,
-        });
-      }
-    } catch (err) {
-      if (err.name === 'AbortError') {
-        return res.status(504).json({ ok: false, message: 'Hub sync timed out' });
-      }
-      return res.status(502).json({ ok: false, message: `Failed to call Hub sync API: ${err.message}` });
-    } finally {
-      clearTimeout(timeoutId);
     }
 
     await WorktimeFinalSync.findOneAndUpdate(
