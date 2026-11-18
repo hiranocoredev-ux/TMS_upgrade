@@ -139,7 +139,7 @@
             <span class="nav-arrow" :class="{ open: dailyreportMenuOpen }">▼</span>
           </div>
 
-          <ReportNavSubmenu v-show="dailyreportMenuOpen" :is-admin="isAdmin" :is-boss="isBoss" />
+          <ReportNavSubmenu v-show="dailyreportMenuOpen" :is-admin="isAdmin" :is-system-admin="isSystemAdminUser" :is-boss="isBoss" />
         </div>
 
         <!-- =====================
@@ -446,7 +446,7 @@ import { useRoute } from 'vue-router';
 import { useAuthStore } from '../composables/useAuth';
 import { useThemeAppearance } from '../composables/useThemeAppearance';
 import { canViewAuditLogs, hasAnyRole } from '../utils/permissions';
-import { ROLES, LEGACY_ROLES, isFinanceManagerRole, isFullAdminRole } from '../constants/roles';
+import { ROLES, LEGACY_ROLES, isFinanceManagerRole, isFullAdminRole, normalizeRole } from '../constants/roles';
 import UserAvatar from '../components/UserAvatar.vue';
 import ReportNavSubmenu from '../components/navigation/ReportNavSubmenu.vue';
 import { getReportsByUser } from '../services/reports';
@@ -523,6 +523,10 @@ const Badge = () => {
 /** Super admin or Admin (SYSTEM_ADMIN): every non-finance admin section. */
 const isAdmin = computed(() =>
   isFullAdminRole(authStore.user?.role, authStore.user?.degree)
+);
+/** The Admin role: also files their own plans and reports. */
+const isSystemAdminUser = computed(() =>
+  normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SYSTEM_ADMIN
 );
 /** Super admin only (Database Management). */
 const isSuperAdmin = computed(() =>

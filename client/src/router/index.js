@@ -83,6 +83,8 @@ const router = createRouter({
             reportPeriod: 'daily',
             documentKind: 'report',
             deniedForSuperAdmin: true,
+            // Admins file their own plans and reports (admin plan tickets).
+            allowForSystemAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -95,6 +97,8 @@ const router = createRouter({
             reportPeriod: 'weekly',
             documentKind: 'report',
             deniedForSuperAdmin: true,
+            // Admins file their own plans and reports (admin plan tickets).
+            allowForSystemAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -107,6 +111,8 @@ const router = createRouter({
             reportPeriod: 'monthly',
             documentKind: 'report',
             deniedForSuperAdmin: true,
+            // Admins file their own plans and reports (admin plan tickets).
+            allowForSystemAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -119,6 +125,8 @@ const router = createRouter({
             reportPeriod: 'daily',
             documentKind: 'plan',
             deniedForSuperAdmin: true,
+            // Admins file their own plans and reports (admin plan tickets).
+            allowForSystemAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -131,6 +139,8 @@ const router = createRouter({
             reportPeriod: 'weekly',
             documentKind: 'plan',
             deniedForSuperAdmin: true,
+            // Admins file their own plans and reports (admin plan tickets).
+            allowForSystemAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -143,6 +153,8 @@ const router = createRouter({
             reportPeriod: 'monthly',
             documentKind: 'plan',
             deniedForSuperAdmin: true,
+            // Admins file their own plans and reports (admin plan tickets).
+            allowForSystemAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -156,6 +168,8 @@ const router = createRouter({
             reportPeriod: 'daily',
             documentKind: 'report',
             deniedForSuperAdmin: true,
+            // Admins file their own plans and reports (admin plan tickets).
+            allowForSystemAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -168,6 +182,8 @@ const router = createRouter({
             reportPeriod: 'weekly',
             documentKind: 'report',
             deniedForSuperAdmin: true,
+            // Admins file their own plans and reports (admin plan tickets).
+            allowForSystemAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -180,6 +196,8 @@ const router = createRouter({
             reportPeriod: 'monthly',
             documentKind: 'report',
             deniedForSuperAdmin: true,
+            // Admins file their own plans and reports (admin plan tickets).
+            allowForSystemAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -192,6 +210,8 @@ const router = createRouter({
             reportPeriod: 'daily',
             documentKind: 'plan',
             deniedForSuperAdmin: true,
+            // Admins file their own plans and reports (admin plan tickets).
+            allowForSystemAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -204,6 +224,8 @@ const router = createRouter({
             reportPeriod: 'weekly',
             documentKind: 'plan',
             deniedForSuperAdmin: true,
+            // Admins file their own plans and reports (admin plan tickets).
+            allowForSystemAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -216,6 +238,8 @@ const router = createRouter({
             reportPeriod: 'monthly',
             documentKind: 'plan',
             deniedForSuperAdmin: true,
+            // Admins file their own plans and reports (admin plan tickets).
+            allowForSystemAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -293,6 +317,90 @@ const router = createRouter({
           }
         },
 
+        {
+          path: 'dailyreports/admins',
+          name: 'allAdmins',
+          component: () => import('../views/AllGroupReportHistory.vue'),
+          meta: {
+            title: 'All Admins Daily Reports',
+            reportPeriod: 'daily',
+            documentKind: 'report',
+            requiresRole: REPORT_SUPER_ADMIN_ALL_TEAMS_ROLES,
+            superAdminTeamsReview: true,
+            // Admins' own plans/reports; only the super admin approves them.
+            adminDocuments: true,
+          }
+        },
+        {
+          path: 'dailyreports/admins-weekly',
+          name: 'allAdminsWeekly',
+          component: () => import('../views/AllGroupReportHistory.vue'),
+          meta: {
+            title: 'All Admins Weekly Reports',
+            reportPeriod: 'weekly',
+            documentKind: 'report',
+            requiresRole: REPORT_SUPER_ADMIN_ALL_TEAMS_ROLES,
+            superAdminTeamsReview: true,
+            // Admins' own plans/reports; only the super admin approves them.
+            adminDocuments: true,
+          }
+        },
+        {
+          path: 'dailyreports/admins-monthly',
+          name: 'allAdminsMonthly',
+          component: () => import('../views/AllGroupReportHistory.vue'),
+          meta: {
+            title: 'All Admins Monthly Reports',
+            reportPeriod: 'monthly',
+            documentKind: 'report',
+            requiresRole: REPORT_SUPER_ADMIN_ALL_TEAMS_ROLES,
+            superAdminTeamsReview: true,
+            // Admins' own plans/reports; only the super admin approves them.
+            adminDocuments: true,
+          }
+        },
+        {
+          path: 'dailyreports/admin-plans',
+          name: 'allAdminPlans',
+          component: () => import('../views/AllGroupReportHistory.vue'),
+          meta: {
+            title: 'All Admins Daily Plans',
+            reportPeriod: 'daily',
+            documentKind: 'plan',
+            requiresRole: REPORT_SUPER_ADMIN_ALL_TEAMS_ROLES,
+            superAdminTeamsReview: true,
+            // Admins' own plans/reports; only the super admin approves them.
+            adminDocuments: true,
+          }
+        },
+        {
+          path: 'dailyreports/admin-plans-weekly',
+          name: 'allAdminPlansWeekly',
+          component: () => import('../views/AllGroupReportHistory.vue'),
+          meta: {
+            title: 'All Admins Weekly Plans',
+            reportPeriod: 'weekly',
+            documentKind: 'plan',
+            requiresRole: REPORT_SUPER_ADMIN_ALL_TEAMS_ROLES,
+            superAdminTeamsReview: true,
+            // Admins' own plans/reports; only the super admin approves them.
+            adminDocuments: true,
+          }
+        },
+        {
+          path: 'dailyreports/admin-plans-monthly',
+          name: 'allAdminPlansMonthly',
+          component: () => import('../views/AllGroupReportHistory.vue'),
+          meta: {
+            title: 'All Admins Monthly Plans',
+            reportPeriod: 'monthly',
+            documentKind: 'plan',
+            requiresRole: REPORT_SUPER_ADMIN_ALL_TEAMS_ROLES,
+            superAdminTeamsReview: true,
+            // Admins' own plans/reports; only the super admin approves them.
+            adminDocuments: true,
+          }
+        },
         {
           path: 'dailyreports/all',
           name: 'all',
@@ -695,7 +803,9 @@ router.beforeEach((to, from, next) => {
         /* ignore */
       }
     }
-    if (user && isFullAdminRole(user.role, user.degree)) {
+    const adminAuthoring =
+      to.meta.allowForSystemAdmin && user && normalizeRole(user.role, user.degree) === ROLES.SYSTEM_ADMIN;
+    if (user && isFullAdminRole(user.role, user.degree) && !adminAuthoring) {
       const period = to.meta.reportPeriod || 'daily';
       const isPlan = to.meta.documentKind === 'plan';
       const byPeriodReport = { daily: 'all', weekly: 'allWeekly', monthly: 'allMonthly' };

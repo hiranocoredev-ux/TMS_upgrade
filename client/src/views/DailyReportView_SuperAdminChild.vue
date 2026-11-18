@@ -32,7 +32,7 @@
           <template #actions>
             <ReportToolbarExportPrint @export-doc="handleExportDoc" @print="handlePrint" />
             <button
-              v-if="state === 2 || state === 5"
+              v-if="canReview && (state === 2 || state === 5)"
               type="button"
               class="btn btn-primary"
               title="Final approval"
@@ -41,7 +41,7 @@
               Approve
             </button>
             <button
-              v-if="state === 2 || state === 5"
+              v-if="canReview && (state === 2 || state === 5)"
               type="button"
               class="btn btn-danger"
               title="Send back for revision"
@@ -75,7 +75,7 @@
           <template #actions>
             <ReportToolbarExportPrint @export-doc="handleExportDoc" @print="handlePrint" />
             <button
-              v-if="state === 2 || state === 5"
+              v-if="canReview && (state === 2 || state === 5)"
               type="button"
               class="btn btn-primary"
               title="Final approval"
@@ -84,7 +84,7 @@
               Approve
             </button>
             <button
-              v-if="state === 2 || state === 5"
+              v-if="canReview && (state === 2 || state === 5)"
               type="button"
               class="btn btn-danger"
               title="Send back for revision"
@@ -120,7 +120,7 @@
               </div>
               <div class="header-actions">
                 <button
-                  v-if="state === 2 || state === 5"
+                  v-if="canReview && (state === 2 || state === 5)"
                   type="button"
                   class="btn btn-primary"
                   title="Final approval"
@@ -129,7 +129,7 @@
                   Approve
                 </button>
                 <button
-                  v-if="state === 2 || state === 5"
+                  v-if="canReview && (state === 2 || state === 5)"
                   type="button"
                   class="btn btn-danger"
                   title="Send back for revision"
@@ -164,6 +164,7 @@
             :anchor-date="date"
             :saved-doc="savedPlanDoc"
             :previous-plan-doc="previousPlanDoc"
+            :audience="ticketAudience"
             :user-id="String(report?.userId || '')"
             :editable="sectionNotesEditable(0)"
             @update:sections="onPlanSectionsUpdate"
@@ -175,6 +176,7 @@
             :anchor-date="date"
             :saved-doc="report"
             :plan-docs="loadedPlanDocs"
+            :audience="ticketAudience"
             :user-id="String(report?.userId || authStore.user?.id || '')"
             :editable="sectionNotesEditable(0)"
             @update:sections="onReportSectionsUpdate"
@@ -274,6 +276,8 @@ import {
 } from '../utils/reportPeriod';
 import { buildReportExportHtml, exportReportAsDoc, printReportHtml } from '../utils/reportDocumentExport';
 import { useToast } from 'vue-toastification';
+import { useAuthStore } from '../composables/useAuth';
+import { ROLES, normalizeRole } from '../constants/roles';
 import { useReportHistorySidebarRefresh } from '../composables/useReportHistorySidebarRefresh';
 import ReportSectionCard from '../components/reports/ReportSectionCard.vue';
 import PlanTicketsComposer from '../components/reports/PlanTicketsComposer.vue';
@@ -299,13 +303,22 @@ const props = defineProps({
   composeUserId: { type: String, default: '' },
   composeUsername: { type: String, default: '' },
   composeGroup: { type: String, default: '' },
-  composeAnchorDate: { type: String, default: '' }
+  composeAnchorDate: { type: String, default: '' },
+  /** An admin's own plan/report ("All admins" pages): only the super admin approves, rejects or edits. */
+  adminDocuments: { type: Boolean, default: false }
 });
 
 const emit = defineEmits(['report-saved']);
 
 const toast = useToast();
+const authStore = useAuthStore();
 const refreshReportHistorySidebar = useReportHistorySidebarRefresh();
+const isSuperAdminViewer = computed(
+  () => normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SUPER_ADMIN
+);
+/** Admins' documents are reviewed by the super admin only; other admins just read them. */
+const canReview = computed(() => !props.adminDocuments || isSuperAdminViewer.value);
+const ticketAudience = computed(() => (props.adminDocuments ? 'admin' : 'member'));
 const route = useRoute();
 const period = computed(() => getReportPeriod(route.meta?.reportPeriod));
 const documentKind = computed(() => getDocumentKindFromRoute(route));
@@ -342,6 +355,7 @@ const isComposeMode = computed(
     Boolean(String(props.composeAnchorDate || '').trim())
 );
 const canEditReport = computed(() => {
+  if (!canReview.value) return false;
   if (isComposeMode.value) return true;
   if (isAllTeamsReview.value) return [1, 2, 3, 4, 5, 6].includes(state.value);
   return [2, 3, 4, 5, 6].includes(state.value);

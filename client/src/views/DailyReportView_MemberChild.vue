@@ -120,6 +120,7 @@
             :anchor-date="date"
             :saved-doc="savedPlanDoc"
             :previous-plan-doc="previousPlanDoc"
+            :audience="ticketAudience"
             :user-id="String(authStore.user?.id || '')"
             :editable="isEditable"
             @update:sections="onPlanSectionsUpdate"
@@ -132,6 +133,7 @@
             :anchor-date="date"
             :saved-doc="report"
             :plan-docs="loadedPlanDocs"
+            :audience="ticketAudience"
             :user-id="String(report?.userId || authStore.user?.id || '')"
             :editable="isEditable"
             :validation-errors="reportTicketValidation"
@@ -234,6 +236,7 @@ import { validateReportTicketSections } from '../utils/reportTickets';
 import ReportTicketsComposer from '../components/reports/ReportTicketsComposer.vue';
 import ReportDocumentPage from '../components/reports/ReportDocumentPage.vue';
 import ReportKindReadPage from '../components/reports/ReportKindReadPage.vue';
+import { ROLES, normalizeRole } from '../constants/roles';
 import ReportToolbarExportPrint from '../components/reports/ReportToolbarExportPrint.vue';
 
 const props = defineProps({
@@ -244,6 +247,12 @@ const toast = useToast();
 const refreshReportHistorySidebar = useReportHistorySidebarRefresh();
 const authStore = useAuthStore();
 const route = useRoute();
+/** Admins' own documents: admin plan tickets, no finance block, kept under the ADMIN group. */
+const isSystemAdminAuthor = computed(
+  () => normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SYSTEM_ADMIN
+);
+const ticketAudience = computed(() => (isSystemAdminAuthor.value ? 'admin' : 'member'));
+const documentGroup = computed(() => (isSystemAdminAuthor.value ? 'ADMIN' : authStore.user?.group));
 const period = computed(() => getReportPeriod(route.meta?.reportPeriod));
 const documentKind = computed(() => getDocumentKindFromRoute(route));
 const kindPeriodLayout = computed(
@@ -485,7 +494,7 @@ async function saveReport() {
       period.value,
       authStore.user.id,
       authStore.user.name,
-      authStore.user.group,
+      documentGroup.value,
       normalizeDateForPeriod(date.value, period.value),
       {
         sections: sectionsForReportPersistence(report.value.sections, kindPeriodLayout.value),
@@ -538,7 +547,7 @@ async function submitReport() {
       period.value,
       authStore.user.id,
       authStore.user.name,
-      authStore.user.group,
+      documentGroup.value,
       normalizeDateForPeriod(date.value, period.value),
       {
         sections: sectionsForReportPersistence(report.value.sections, kindPeriodLayout.value),

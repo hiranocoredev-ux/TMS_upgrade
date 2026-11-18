@@ -103,7 +103,7 @@ export const deleteDaily = async (req, res) => {
         return res.status(403).json({ message: 'You can only delete your own group\'s reports' });
     }
 
-    await Daily.findByIdAndRemove(id);
+    await Daily.findByIdAndDelete(id);
     res.json({ message: "DailyReport deleted successfully." });
 }
 

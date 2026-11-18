@@ -289,6 +289,7 @@
           :anchor-date="effectiveReportDate"
           :saved-doc="savedPlanDoc"
           :previous-plan-doc="previousPlanDoc"
+          :audience="ticketAudience"
           :user-id="String(authStore.user?.id || '')"
           :editable="isEditable"
           @update:sections="onPlanSectionsUpdate"
@@ -300,6 +301,7 @@
           :anchor-date="effectiveReportDate"
           :saved-doc="report"
           :plan-docs="loadedPlanDocs"
+          :audience="ticketAudience"
             :user-id="String(report?.userId || authStore.user?.id || '')"
           :editable="isEditable"
           :validation-errors="reportTicketValidation"
@@ -402,6 +404,7 @@ import TmsNativeCalendarField from '../components/ui/TmsNativeCalendarField.vue'
 import { useToast } from 'vue-toastification';
 import ReportSectionCard from '../components/reports/ReportSectionCard.vue';
 import PlanTicketsComposer from '../components/reports/PlanTicketsComposer.vue';
+import { ROLES, normalizeRole } from '../constants/roles';
 import { findLatestPlanDoc } from '../utils/planTickets';
 import { validateReportTicketSections } from '../utils/reportTickets';
 import ReportTicketsComposer from '../components/reports/ReportTicketsComposer.vue';
@@ -413,6 +416,16 @@ import { buildReportExportHtml, exportReportAsDoc, printReportHtml } from '../ut
 const toast = useToast();
 const authStore = useAuthStore();
 const route = useRoute();
+/**
+ * Admins (the Admin role) file their own plans and reports with the admin plan
+ * tickets; they have no team and no finance targets. Their documents are kept
+ * under the ADMIN group, and only the super admin approves them.
+ */
+const isSystemAdminAuthor = computed(
+  () => normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SYSTEM_ADMIN
+);
+const ticketAudience = computed(() => (isSystemAdminAuthor.value ? 'admin' : 'member'));
+const documentGroup = computed(() => (isSystemAdminAuthor.value ? 'ADMIN' : authStore.user?.group));
 const period = computed(() => getReportPeriod(route.meta?.reportPeriod));
 const isDailyPeriod = computed(() => period.value === 'daily');
 const isWeeklyPeriod = computed(() => period.value === REPORT_PERIODS.WEEKLY);
@@ -829,7 +842,7 @@ async function saveReport() {
       period.value,
       authStore.user.id,
       authStore.user.name,
-      authStore.user.group,
+      documentGroup.value,
       normalizedDate,
       {
         sections: sectionsForReportPersistence(report.value.sections, kindPeriodLayout.value),
@@ -889,7 +902,7 @@ async function submitReport() {
       period.value,
       authStore.user.id,
       authStore.user.name,
-      authStore.user.group,
+      documentGroup.value,
       normalizedDate,
       {
         sections: sectionsForReportPersistence(report.value.sections, kindPeriodLayout.value),

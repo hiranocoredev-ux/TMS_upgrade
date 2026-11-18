@@ -3,15 +3,38 @@
     <header class="page-header">
       <h1>{{ pageTitle }}</h1>
       <p class="page-subtitle">
-        Default subtitles shown on {{ activePeriod }} plan submit pages. Add, edit, or remove tickets for this period.
+        <template v-if="audience === 'admin'">
+          Tickets on the Admins' own {{ activePeriod }} plans.
+          {{ canEditRows ? 'Only you (super admin) can change them.' : 'Only the super admin can change them.' }}
+        </template>
+        <template v-else>
+          Default subtitles shown on {{ activePeriod }} plan submit pages. Add, edit, or remove tickets for this period.
+        </template>
       </p>
     </header>
+
+    <nav class="period-tabs audience-tabs" aria-label="Whose plans">
+      <router-link
+        :to="{ name: templateRouteName(activePeriod), query: {} }"
+        class="period-tab"
+        :class="{ 'is-active': audience === 'member' }"
+      >
+        Team members
+      </router-link>
+      <router-link
+        :to="{ name: templateRouteName(activePeriod), query: { audience: 'admin' } }"
+        class="period-tab"
+        :class="{ 'is-active': audience === 'admin' }"
+      >
+        Admins
+      </router-link>
+    </nav>
 
     <nav class="period-tabs" aria-label="Switch period">
       <router-link
         v-for="p in periods"
         :key="p"
-        :to="{ name: templateRouteName(p) }"
+        :to="{ name: templateRouteName(p), query: audience === 'admin' ? { audience: 'admin' } : {} }"
         class="period-tab"
         :class="{ 'is-active': activePeriod === p }"
       >
@@ -27,7 +50,7 @@
             <th>Order</th>
             <th>Subtitle</th>
             <th>Status</th>
-            <th class="col-actions">Actions</th>
+            <th v-if="canEditRows" class="col-actions">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -47,7 +70,7 @@
                 {{ row.active ? 'Active' : 'Hidden' }}
               </span>
             </td>
-            <td class="col-actions">
+            <td v-if="canEditRows" class="col-actions">
               <template v-if="editingId === row._id">
                 <button type="button" class="btn btn-primary btn-sm" @click="saveEdit(row)">Save</button>
                 <button type="button" class="btn btn-neutral btn-sm" @click="cancelEdit">Cancel</button>
@@ -61,7 +84,7 @@
         </tbody>
       </table>
 
-      <div class="add-row">
+      <div v-if="canEditRows" class="add-row">
         <input v-model="newTitle" type="text" class="input" placeholder="New ticket subtitle" />
         <button type="button" class="btn btn-primary" :disabled="!newTitle.trim()" @click="addRow">
           Add ticket
@@ -75,6 +98,8 @@
 import { ref, watch, onMounted, computed } from 'vue';
 import { useRoute } from 'vue-router';
 import { useToast } from 'vue-toastification';
+import { useAuthStore } from '../composables/useAuth';
+import { ROLES, normalizeRole } from '../constants/roles';
 import {
   getPlanTicketTemplatesAdmin,
   createPlanTicketTemplate,
@@ -84,6 +109,14 @@ import {
 
 const toast = useToast();
 const route = useRoute();
+const authStore = useAuthStore();
+/** 'member' (team plans) or 'admin' (the Admin role's own plans), from ?audience=admin. */
+const audience = computed(() => (route.query?.audience === 'admin' ? 'admin' : 'member'));
+const isSuperAdminViewer = computed(
+  () => normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SUPER_ADMIN
+);
+/** Admin tickets: super admin only. Team tickets: as before (super admin and Admin). */
+const canEditRows = computed(() => audience.value !== 'admin' || isSuperAdminViewer.value);
 const periods = ['daily', 'weekly', 'monthly'];
 const activePeriod = ref('daily');
 
@@ -102,7 +135,9 @@ function syncPeriodFromRoute() {
   if (periods.includes(p)) activePeriod.value = p;
 }
 
-const pageTitle = computed(() => `${periodLabel(activePeriod.value)} plan ticket templates`);
+const pageTitle = computed(
+  () => `${periodLabel(activePeriod.value)} ${audience.value === 'admin' ? 'admin ' : ''}plan ticket templates`
+);
 const rows = ref([]);
 const loading = ref(false);
 const editingId = ref('');
@@ -116,7 +151,7 @@ function periodLabel(p) {
 async function loadRows() {
   loading.value = true;
   try {
-    const res = await getPlanTicketTemplatesAdmin(activePeriod.value);
+    const res = await getPlanTicketTemplatesAdmin(activePeriod.value, audience.value);
     rows.value = res.data?.data || res.data || [];
   } catch (e) {
     toast.error(e?.response?.data?.message || 'Failed to load tickets');
@@ -164,7 +199,7 @@ async function addRow() {
   const title = newTitle.value.trim();
   if (!title) return;
   try {
-    await createPlanTicketTemplate({ period: activePeriod.value, title });
+    await createPlanTicketTemplate({ period: activePeriod.value, title, audience: audience.value });
     toast.success('Ticket added');
     newTitle.value = '';
     await loadRows();
@@ -174,6 +209,10 @@ async function addRow() {
 }
 
 watch(activePeriod, loadRows);
+watch(audience, () => {
+  cancelEdit();
+  loadRows();
+});
 watch(() => route.meta?.reportPeriod, () => {
   syncPeriodFromRoute();
   loadRows();
@@ -304,5 +343,9 @@ onMounted(() => {
   padding: 2rem;
   text-align: center;
   color: var(--text-tertiary);
+}
+
+.audience-tabs {
+  margin-bottom: 0.75rem;
 }
 </style>

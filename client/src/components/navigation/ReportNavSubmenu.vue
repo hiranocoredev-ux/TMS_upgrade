@@ -22,6 +22,27 @@
             </router-link>
             <router-link
               v-if="isAdmin"
+              :to="{ name: period.plans.admins }"
+              class="nav-item nav-subitem nav-subitem-compact"
+            >
+              <span>All admins</span>
+            </router-link>
+            <template v-if="isSystemAdmin">
+              <router-link
+                :to="{ name: period.plans.submit }"
+                class="nav-item nav-subitem nav-subitem-compact"
+              >
+                <span>My plan</span>
+              </router-link>
+              <router-link
+                :to="{ name: period.plans.history }"
+                class="nav-item nav-subitem nav-subitem-compact"
+              >
+                <span>My history</span>
+              </router-link>
+            </template>
+            <router-link
+              v-if="isAdmin"
               :to="{ name: period.plans.templates }"
               class="nav-item nav-subitem nav-subitem-compact"
             >
@@ -60,7 +81,28 @@
             >
               <span>All teams</span>
             </router-link>
-            <template v-else>
+            <router-link
+              v-if="isAdmin"
+              :to="{ name: period.reports.admins }"
+              class="nav-item nav-subitem nav-subitem-compact"
+            >
+              <span>All admins</span>
+            </router-link>
+            <template v-if="isSystemAdmin">
+              <router-link
+                :to="{ name: period.reports.submit }"
+                class="nav-item nav-subitem nav-subitem-compact"
+              >
+                <span>My report</span>
+              </router-link>
+              <router-link
+                :to="{ name: period.reports.history }"
+                class="nav-item nav-subitem nav-subitem-compact"
+              >
+                <span>My history</span>
+              </router-link>
+            </template>
+            <template v-if="!isAdmin">
               <router-link
                 :to="{ name: period.reports.submit }"
                 class="nav-item nav-subitem nav-subitem-compact"
@@ -94,6 +136,8 @@ import { useRoute } from 'vue-router';
 
 defineProps({
   isAdmin: { type: Boolean, default: false },
+  /** The Admin role (not the super admin): also files their own plans and reports. */
+  isSystemAdmin: { type: Boolean, default: false },
   isBoss: { type: Boolean, default: false }
 });
 
@@ -105,18 +149,20 @@ const REPORT_NAV_PERIODS = [
     label: 'Daily',
     plans: {
       all: 'allPlans',
+      admins: 'allAdminPlans',
       templates: 'planTicketTemplatesDaily',
       submit: 'dailyplan',
       history: 'planHistory',
       group: 'groupPlanHistory'
     },
-    reports: { all: 'all', submit: 'dailyreport', history: 'reportHistory', group: 'groupReportHistory' }
+    reports: { all: 'all', admins: 'allAdmins', submit: 'dailyreport', history: 'reportHistory', group: 'groupReportHistory' }
   },
   {
     key: 'weekly',
     label: 'Weekly',
     plans: {
       all: 'allPlansWeekly',
+      admins: 'allAdminPlansWeekly',
       templates: 'planTicketTemplatesWeekly',
       submit: 'weeklyplan',
       history: 'weeklyPlanHistory',
@@ -124,6 +170,7 @@ const REPORT_NAV_PERIODS = [
     },
     reports: {
       all: 'allWeekly',
+      admins: 'allAdminsWeekly',
       submit: 'weeklyreport',
       history: 'weeklyReportHistory',
       group: 'groupWeeklyReportHistory'
@@ -134,6 +181,7 @@ const REPORT_NAV_PERIODS = [
     label: 'Monthly',
     plans: {
       all: 'allPlansMonthly',
+      admins: 'allAdminPlansMonthly',
       templates: 'planTicketTemplatesMonthly',
       submit: 'monthlyplan',
       history: 'monthlyPlanHistory',
@@ -141,6 +189,7 @@ const REPORT_NAV_PERIODS = [
     },
     reports: {
       all: 'allMonthly',
+      admins: 'allAdminsMonthly',
       submit: 'monthlyreport',
       history: 'monthlyReportHistory',
       group: 'groupMonthlyReportHistory'

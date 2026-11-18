@@ -19,7 +19,11 @@
         </div>
       </div>
 
-      <div class="filter-group">
+      <p v-if="adminMode" class="admin-mode-note">
+        Plans and reports of the Admin role. {{ isSuperAdminViewer ? 'You approve or reject them.' : 'Only the super admin approves or rejects them.' }}
+      </p>
+
+      <div v-if="!adminMode" class="filter-group">
         <label for="agrh-group">Group</label>
         <select
           id="agrh-group"
@@ -62,7 +66,7 @@
           <thead>
             <tr>
               <th class="col-group">Group</th>
-              <th class="col-member">Member</th>
+              <th class="col-member">{{ adminMode ? 'Admin' : 'Member' }}</th>
               <th class="col-state">State</th>
               <th class="col-created">Created</th>
             </tr>
@@ -96,7 +100,7 @@
             </tr>
 
             <tr v-if="filteredData.length === 0">
-              <td colspan="4" class="no-data">No team members or no matches for this period / search</td>
+              <td colspan="4" class="no-data">{{ adminMode ? 'No admins or no matches for this period / search' : 'No team members or no matches for this period / search' }}</td>
             </tr>
           </tbody>
         </table>
@@ -104,7 +108,16 @@
     </div>
 
     <div class="report-panel">
-      <DailyReportView v-if="s_reportId" :key="`${documentKind}-${s_reportId}`" :p_id="s_reportId" />
+      <DailyReportView
+        v-if="s_reportId"
+        :key="`${documentKind}-${s_reportId}`"
+        :p_id="s_reportId"
+        :admin-documents="adminMode"
+      />
+      <div v-else-if="selectedMissingMember && adminMode" class="empty-state">
+        <p class="empty-state__title">Not submitted yet</p>
+        <p class="empty-state__text">{{ selectedMissingMember.memberName }} has not filed this period.</p>
+      </div>
       <DailyReportView
         v-else-if="selectedMissingMember"
         :key="`${documentKind}-compose-${selectedMissingMember.userId}-${selectedAnchorDate}`"
@@ -139,12 +152,24 @@ import {
 } from '../utils/reportPeriod';
 import { ROLES, normalizeRole } from '../constants/roles.js';
 import { useToast } from 'vue-toastification';
+import { useAuthStore } from '../composables/useAuth';
 import { provideReportHistorySidebarRefresh } from '../composables/useReportHistorySidebarRefresh';
 
 const EST_TIMEZONE = 'America/New_York';
 
 const toast = useToast();
 const route = useRoute();
+const authStore = useAuthStore();
+/** "All admins" pages: the Admin role's own plans/reports instead of the teams'. */
+const adminMode = computed(() => Boolean(route.meta?.adminDocuments));
+const ADMIN_DOCUMENT_GROUP = 'ADMIN';
+const isSuperAdminViewer = computed(
+  () => normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SUPER_ADMIN
+);
+/** The group a roster user's documents are filed under. */
+function rosterGroupOf(u) {
+  return adminMode.value ? ADMIN_DOCUMENT_GROUP : String(u?.group || '');
+}
 const period = computed(() => getReportPeriod(route.meta?.reportPeriod));
 const documentKind = computed(() => getDocumentKindFromRoute(route));
 
@@ -257,6 +282,7 @@ function pickBestReport(candidates) {
 
 function rosterUsersEligible(u) {
   if (!u || u.status === 'disabled') return false;
+  if (adminMode.value) return normalizeRole(u.role, u.degree) === ROLES.SYSTEM_ADMIN;
   if (['SUPER_ADMIN', 'SYSTEM_ADMIN', 'FINANCE_MANAGER'].includes(u.role || '')) return false;
   return true;
 }
@@ -264,10 +290,11 @@ function rosterUsersEligible(u) {
 const rosterMemberCountAll = computed(() => roster.value.filter(rosterUsersEligible).length);
 
 function rosterMemberCountForGroup(code) {
-  return roster.value.filter((u) => rosterUsersEligible(u) && String(u.group) === String(code)).length;
+  return roster.value.filter((u) => rosterUsersEligible(u) && rosterGroupOf(u) === String(code)).length;
 }
 
 function displayGroupName(code) {
+  if (code === ADMIN_DOCUMENT_GROUP) return 'Admins';
   const g = groups.value.find((x) => x.code === code);
   return g?.name || code || '-';
 }
@@ -276,7 +303,7 @@ function displayGroupName(code) {
 const rosterIdsForCalendar = computed(() => {
   let users = roster.value.filter(rosterUsersEligible);
   const gf = filters.value.group;
-  if (gf && gf !== 'All') {
+  if (!adminMode.value && gf && gf !== 'All') {
     users = users.filter((u) => String(u.group) === gf);
   }
   return users.map((u) => String(u.id ?? u._id)).filter(Boolean);
@@ -338,13 +365,13 @@ const filteredData = computed(() => {
 
   let users = roster.value.filter(rosterUsersEligible);
 
-  if (groupFilter !== 'All') {
+  if (!adminMode.value && groupFilter !== 'All') {
     users = users.filter((u) => String(u.group) === groupFilter);
   }
 
   const rows = users.map((user) => {
     const uid = normalizeUserIdKey(user.id ?? user._id);
-    const g = String(user.group || '');
+    const g = rosterGroupOf(user);
     const key = `${g}::${uid}`;
     const report = pickBestReport(byKey.get(key) || []);
     const hasReport = report != null && Number(report.state ?? 0) >= 1;
@@ -465,6 +492,11 @@ onMounted(() => {
 
 watch(period, () => {
   loadStats();
+});
+
+watch(adminMode, () => {
+  s_reportId.value = '';
+  s_selectedMemberKey.value = '';
 });
 
 watch(documentKind, () => {
@@ -823,5 +855,14 @@ label {
     margin-top: 4px;
     width: fit-content;
   }
+}
+
+.admin-mode-note {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
 }
 </style>

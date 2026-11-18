@@ -20,6 +20,15 @@ const planTicketTemplateSchema = new mongoose.Schema(
       trim: true,
       maxlength: 200
     },
+    /**
+     * Whose plans use this ticket: group members/bosses ('member') or admins
+     * ('admin'). Rows from before this field existed are member tickets.
+     */
+    audience: {
+      type: String,
+      enum: ['member', 'admin'],
+      default: 'member'
+    },
     sortOrder: {
       type: Number,
       default: 0

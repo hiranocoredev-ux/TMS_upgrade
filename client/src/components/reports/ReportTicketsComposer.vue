@@ -66,11 +66,15 @@ const props = defineProps({
   editable: { type: Boolean, default: true },
   validationErrors: { type: Array, default: () => [] },
   /** Whose figures the finance block reads; defaults to the signed-in user. */
-  userId: { type: String, default: '' }
+  userId: { type: String, default: '' },
+  /** 'admin': an admin's own report (no finance block). */
+  audience: { type: String, default: 'member' }
 });
 
 /** Monthly and weekly reports open with the income / outcome result. */
-const hasFinanceTicket = computed(() => props.period === 'monthly' || props.period === 'weekly');
+const hasFinanceTicket = computed(
+  () => props.audience !== 'admin' && (props.period === 'monthly' || props.period === 'weekly')
+);
 const financeLabel = computed(() => `1. ${FINANCE_TICKET_TITLES.report}`);
 const financeNotes = ref('');
 /** The achieved % the finance block reports, stored with the section. */

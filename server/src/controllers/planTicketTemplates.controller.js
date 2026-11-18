@@ -1,6 +1,15 @@
 import PlanTicketTemplate from '../models/PlanTicketTemplate.js';
-import { listPlanTicketTemplates } from '../services/planTicketTemplate.service.js';
+import { listPlanTicketTemplates, normalizeAudience, audienceFilter } from '../services/planTicketTemplate.service.js';
 import { PLAN_TICKET_PERIODS } from '../constants/planTicketDefaults.js';
+import { isSuperAdminRole } from '../constants/roles.js';
+
+/** Admin plan tickets: only the super admin may change them (not the Admin role). */
+const forbidAdminTicketWrite = (req, res, audience) => {
+  if (normalizeAudience(audience) !== 'admin') return false;
+  if (isSuperAdminRole(req.user?.role, req.user?.degree)) return false;
+  res.status(403).json({ ok: false, message: 'Only the super admin can manage admin plan tickets' });
+  return true;
+};
 
 const makeCustomKey = () =>
   `CUSTOM_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
@@ -17,7 +26,7 @@ export const getPlanTicketTemplates = async (req, res) => {
     if (!period) {
       return res.status(400).json({ ok: false, message: 'period must be daily, weekly, or monthly' });
     }
-    const data = await listPlanTicketTemplates(period, { activeOnly: true });
+    const data = await listPlanTicketTemplates(period, { activeOnly: true, audience: req.query.audience });
     return res.json({ ok: true, data });
   } catch (err) {
     return res.status(500).json({ ok: false, message: err.message });
@@ -30,7 +39,7 @@ export const getPlanTicketTemplatesAdmin = async (req, res) => {
     if (!period) {
       return res.status(400).json({ ok: false, message: 'period must be daily, weekly, or monthly' });
     }
-    const data = await listPlanTicketTemplates(period, { activeOnly: false });
+    const data = await listPlanTicketTemplates(period, { activeOnly: false, audience: req.query.audience });
     return res.json({ ok: true, data });
   } catch (err) {
     return res.status(500).json({ ok: false, message: err.message });
@@ -43,12 +52,14 @@ export const createPlanTicketTemplate = async (req, res) => {
     if (!period) {
       return res.status(400).json({ ok: false, message: 'period must be daily, weekly, or monthly' });
     }
+    const audience = normalizeAudience(req.body.audience || req.query.audience);
+    if (forbidAdminTicketWrite(req, res, audience)) return;
     const title = String(req.body.title || '').trim();
     if (!title) {
       return res.status(400).json({ ok: false, message: 'title is required' });
     }
 
-    const maxOrder = await PlanTicketTemplate.findOne({ period })
+    const maxOrder = await PlanTicketTemplate.findOne({ period, ...audienceFilter(audience) })
       .sort({ sortOrder: -1 })
       .select('sortOrder')
       .lean();
@@ -59,6 +70,7 @@ export const createPlanTicketTemplate = async (req, res) => {
 
     const doc = await PlanTicketTemplate.create({
       period,
+      audience,
       key: makeCustomKey(),
       title,
       sortOrder,
@@ -80,6 +92,9 @@ export const createPlanTicketTemplate = async (req, res) => {
 export const updatePlanTicketTemplate = async (req, res) => {
   try {
     const { id } = req.params;
+    const current = await PlanTicketTemplate.findById(id).select('audience').lean();
+    if (!current) return res.status(404).json({ ok: false, message: 'Plan ticket not found' });
+    if (forbidAdminTicketWrite(req, res, current.audience)) return;
     const title = String(req.body.title || '').trim();
     if (!title) {
       return res.status(400).json({ ok: false, message: 'title is required' });
@@ -109,6 +124,7 @@ export const deletePlanTicketTemplate = async (req, res) => {
     const { id } = req.params;
     const existing = await PlanTicketTemplate.findById(id).lean();
     if (!existing) return res.status(404).json({ ok: false, message: 'Plan ticket not found' });
+    if (forbidAdminTicketWrite(req, res, existing.audience)) return;
     await PlanTicketTemplate.findByIdAndDelete(id);
     return res.json({ ok: true, message: 'Plan ticket removed' });
   } catch (err) {

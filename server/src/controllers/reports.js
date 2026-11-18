@@ -2,7 +2,8 @@ import mongoose from 'mongoose';
 import Daily from "../models/Daily.js";
 import Weekly from "../models/Weekly.js";
 import Monthly from "../models/Monthly.js";
-import { normalizeRole, ROLES, isFullAdminRole } from "../constants/roles.js";
+import User from '../models/User.js';
+import { normalizeRole, ROLES, isFullAdminRole, isSuperAdminRole, isSystemAdminRole } from "../constants/roles.js";
 import {
     getESTDateKey,
     getESTMonthStartKey,
@@ -43,6 +44,20 @@ function listFilterForKind(kind, base = {}) {
         ...base,
         $or: [{ kind: DOCUMENT_KIND.REPORT }, { kind: { $exists: false } }]
     };
+}
+
+/**
+ * Admins (the SYSTEM_ADMIN role) keep their own plans and reports. They belong
+ * to no team, so their documents are filed under this group, which no team
+ * page lists. Only the author and the super admin may change them, and only
+ * the super admin approves or rejects them.
+ */
+export const ADMIN_DOCUMENT_GROUP = 'ADMIN';
+
+async function isAdminAuthor(userId) {
+    if (!mongoose.Types.ObjectId.isValid(String(userId || ''))) return false;
+    const owner = await User.findById(userId).select('role degree').lean();
+    return !!owner && isSystemAdminRole(owner.role, owner.degree);
 }
 
 function upsertKindValue(kind) {
@@ -199,6 +214,27 @@ export const updateReport = async (req, res) => {
         if (!isFullAdminRole(effective) && group !== user?.group) {
             return res.status(403).json({ message: 'You can only edit your own group\'s reports' });
         }
+
+        // An admin's own plan or report: the author drafts and submits, the
+        // super admin alone approves or rejects (approval is final, state 6).
+        const isAdminDoc = await isAdminAuthor(userId);
+        let docGroup = group;
+        let nextState = state;
+        if (isAdminDoc) {
+            const actorIsSuperAdmin = isSuperAdminRole(user?.role, user?.degree);
+            if (!isSelfReport && !actorIsSuperAdmin) {
+                return res.status(403).json({ message: 'Only the author or the super admin can change an admin\'s plan or report' });
+            }
+            if (isSelfReport && ![1, 2].includes(Number(state))) {
+                return res.status(403).json({ message: 'Only the super admin can approve or reject admin plans and reports' });
+            }
+            if (actorIsSuperAdmin && Number(state) === 5) nextState = 6;
+            docGroup = ADMIN_DOCUMENT_GROUP;
+        }
+        // Date rules apply to whoever files their own plan or report.
+        const isSelfAuthorRole =
+            effective === ROLES.GROUP_MEMBER || effective === ROLES.GROUP_BOSS || (isAdminDoc && isSelfReport);
+
         if (nextIsRejected) {
             if (!isLeader) {
                 return res.status(403).json({ message: 'Only group boss or super admin can reject reports' });
@@ -216,7 +252,7 @@ export const updateReport = async (req, res) => {
         if (
             isSelfReport &&
             state === 2 &&
-            (effective === ROLES.GROUP_MEMBER || effective === ROLES.GROUP_BOSS)
+            isSelfAuthorRole
         ) {
             existingForSubmitWindow = await findByUserDate(Model, userId, normalizedDate, kind);
         }
@@ -227,7 +263,7 @@ export const updateReport = async (req, res) => {
         if (
             isSelfReport &&
             state === 2 &&
-            (effective === ROLES.GROUP_MEMBER || effective === ROLES.GROUP_BOSS) &&
+            isSelfAuthorRole &&
             !isRejectedResubmit
         ) {
             const targetDateKey = normalizedDate.toISOString().slice(0, 10);
@@ -269,7 +305,8 @@ export const updateReport = async (req, res) => {
              * A monthly or weekly plan opens with the income / outcome target from
              * Finance Management, so it cannot be submitted before that target exists.
              */
-            if (isPlan && (period === 'monthly' || period === 'weekly')) {
+            // Admins have no finance targets, so this applies to team members only.
+            if (isPlan && !isAdminDoc && (period === 'monthly' || period === 'weekly')) {
                 const target = await financeTargetFor(userId, period, targetDateKey);
                 if (target.missing) {
                     return res.status(400).json({
@@ -290,7 +327,7 @@ export const updateReport = async (req, res) => {
         const prevReport = existingInPeriod || (await findByUserDate(Model, userId, normalizedDate, kind));
         const resolvedRejectReason = nextIsRejected
             ? trimmedRejectReason
-            : [2, 5, 6].includes(Number(state))
+            : [2, 5, 6].includes(Number(nextState))
                 ? ''
                 : String(prevReport?.rejectReason || '');
         const updatedReport = await Model.findOneAndUpdate(
@@ -299,11 +336,11 @@ export const updateReport = async (req, res) => {
                 $set: {
                     userId,
                     username,
-                    group,
+                    group: docGroup,
                     date: targetDate,
                     kind: docKind,
                     sections,
-                    state,
+                    state: nextState,
                     rejectReason: resolvedRejectReason
                 }
             },
@@ -337,14 +374,27 @@ export const deleteReport = async (req, res) => {
 
     if (!mongoose.Types.ObjectId.isValid(id)) return res.status(404).send(`No post with id: ${id}`);
 
-    const report = await Model.findById(id);
-    if (!report) return res.status(404).json({ message: 'Report not found' });
+    try {
+        const report = await Model.findById(id);
+        if (!report) return res.status(404).json({ message: 'Report not found' });
 
-    const effective = normalizeRole(user?.role, user?.degree);
-    if (!isFullAdminRole(effective) && report.group !== user?.group) {
-        return res.status(403).json({ message: 'You can only delete your own group\'s reports' });
+        const effective = normalizeRole(user?.role, user?.degree);
+        if (!isFullAdminRole(effective) && report.group !== user?.group) {
+            return res.status(403).json({ message: 'You can only delete your own group\'s reports' });
+        }
+        // An admin's document: only its author or the super admin.
+        if (
+            (report.group === ADMIN_DOCUMENT_GROUP || (await isAdminAuthor(report.userId))) &&
+            String(report.userId) !== String(user?._id || '') &&
+            !isSuperAdminRole(user?.role, user?.degree)
+        ) {
+            return res.status(403).json({ message: 'Only the author or the super admin can delete an admin\'s plan or report' });
+        }
+
+        // findByIdAndRemove no longer exists in Mongoose 8.
+        await Model.findByIdAndDelete(id);
+        res.json({ message: "Report deleted successfully." });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
-
-    await Model.findByIdAndRemove(id);
-    res.json({ message: "Report deleted successfully." });
 };

@@ -115,13 +115,17 @@ const props = defineProps({
   savedDoc: { type: Object, default: null },
   previousPlanDoc: { type: Object, default: null },
   userId: { type: String, default: '' },
-  editable: { type: Boolean, default: true }
+  editable: { type: Boolean, default: true },
+  /** 'admin': an admin's own plan (admin tickets, no finance target). */
+  audience: { type: String, default: 'member' }
 });
 
 const emit = defineEmits(['update:sections', 'finance-status']);
 
 /** Monthly and weekly plans open with the income / outcome target. */
-const hasFinanceTicket = computed(() => props.period === 'monthly' || props.period === 'weekly');
+const hasFinanceTicket = computed(
+  () => props.audience !== 'admin' && (props.period === 'monthly' || props.period === 'weekly')
+);
 const financeLabel = computed(() => `1. ${FINANCE_TICKET_TITLES.plan}`);
 const financeNotes = ref('');
 
@@ -263,7 +267,7 @@ async function loadTemplatesAndMerge() {
   loading.value = true;
   loadError.value = '';
   try {
-    const res = await getPlanTicketTemplates(props.period);
+    const res = await getPlanTicketTemplates(props.period, props.audience);
     const templates = res.data?.data || res.data || [];
     allTemplates.value = templates;
     tickets.value = ensureDragIds(
