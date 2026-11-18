@@ -38,7 +38,7 @@ import {
   isGlobalFinanceViewer,
   FINANCE_META_GROUPS,
 } from "../utils/financeTeamScope.js";
-import { isSuperAdminRole, canManageAllFinance, isSystemAdminRole } from "../constants/roles.js";
+import { isSuperAdminRole, canManageAllFinance, isSystemAdminRole, isNonMemberRole } from "../constants/roles.js";
 import {
   REVIEW,
   reviewStageOf,
@@ -485,6 +485,18 @@ router.post(
               );
           }
         }
+        // Admins' and finance managers' transactions: super admin, Admin and finance manager only.
+        if (isNonMemberRole(targetUser.role, targetUser.degree) && !isGlobalFinanceViewer(req.user)) {
+          return res
+            .status(403)
+            .json(
+              createErrorResponse(
+                "ACCESS_DENIED",
+                "Only the super admin, admins and finance managers handle admin and finance manager transactions",
+                403,
+              ),
+            );
+        }
         targetUserId = validatedData.userId;
       }
 
@@ -634,7 +646,19 @@ router.put(
       }
 
       // Only own group can edit: get transaction owner's group
-      const txOwner = await User.findById(transaction.userId).select("group").lean();
+      const txOwner = await User.findById(transaction.userId).select("group role degree").lean();
+      // Admins' and finance managers' transactions: super admin, Admin and finance manager only.
+      if (txOwner && isNonMemberRole(txOwner.role, txOwner.degree) && !isGlobalFinanceViewer(req.user)) {
+        return res
+          .status(403)
+          .json(
+            createErrorResponse(
+              "ACCESS_DENIED",
+              "You do not have permission to change this transaction",
+              403,
+            ),
+          );
+      }
       const reqGroup = req.user?.group;
       if (req.user.role !== ROLES.SUPER_ADMIN && reqGroup && !["SUPER_ADMIN", "ADMIN"].includes(reqGroup)) {
         if (txOwner?.group !== reqGroup) {
@@ -913,7 +937,19 @@ router.delete(
       }
 
       // Only own group can delete: boss/admin can only delete for their group
-      const txOwner = await User.findById(transaction.userId).select("group").lean();
+      const txOwner = await User.findById(transaction.userId).select("group role degree").lean();
+      // Admins' and finance managers' transactions: super admin, Admin and finance manager only.
+      if (txOwner && isNonMemberRole(txOwner.role, txOwner.degree) && !isGlobalFinanceViewer(req.user)) {
+        return res
+          .status(403)
+          .json(
+            createErrorResponse(
+              "ACCESS_DENIED",
+              "You do not have permission to change this transaction",
+              403,
+            ),
+          );
+      }
       const reqGroup = req.user?.group;
       if (req.user.role !== ROLES.SUPER_ADMIN && reqGroup && !["SUPER_ADMIN", "ADMIN"].includes(reqGroup)) {
         if (txOwner?.group !== reqGroup) {

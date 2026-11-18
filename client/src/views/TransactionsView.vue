@@ -200,7 +200,7 @@ import { useFinance } from '../composables/useFinance';
 import { useAuthStore } from '../composables/useAuth';
 import { fetchUsers } from '../services/users';
 import { fetchGroups } from '../services/admin';
-import { excludeNonTransactionUsers } from '../utils/userFilters';
+import { transactionListUsers } from '../utils/userFilters';
 import {
   isFinanceManagerUser,
   financeUsersListParams,
@@ -441,8 +441,8 @@ const changePage = (page) => {
 const loadUsers = async () => {
   const usersResponse = await fetchUsers(buildUserFetchParams());
   if (usersResponse.ok && usersResponse.data) {
-    // Admins hold transactions too; only the super admin and finance managers are left out.
-    allUsers.value = excludeNonTransactionUsers(usersResponse.data.users || []);
+    // Admin and finance manager accounts are listed only for super admin, Admin and finance manager viewers.
+    allUsers.value = transactionListUsers(usersResponse.data.users || [], showGroupFilter.value);
     syncUserSelection();
   }
 };

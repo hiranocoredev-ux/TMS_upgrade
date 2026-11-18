@@ -1,4 +1,4 @@
-import { ROLES, normalizeRole, isSuperAdminRole, canViewAllFinance } from "../constants/roles.js";
+import { ROLES, normalizeRole, isSuperAdminRole, canViewAllFinance, isNonMemberRole } from "../constants/roles.js";
 import { hasAdminPrivileges } from "./roleMapper.js";
 import User from "../models/User.js";
 
@@ -25,10 +25,15 @@ export function isCrossTeamFinanceOverviewViewer(user) {
   return isSuperAdminRole(user.role, user.degree);
 }
 
+/**
+ * A team's members for finance. Super admin, admin and finance manager accounts
+ * are never part of a team here, even if a group is stored on them: their
+ * transactions are visible to super admin, admin and finance manager only.
+ */
 export async function getUserIdsInGroup(group) {
   if (!group || FINANCE_META_GROUPS.has(group)) return [];
-  const rows = await User.find({ group }).select("_id").lean();
-  return rows.map((r) => r._id);
+  const rows = await User.find({ group }).select("_id role degree").lean();
+  return rows.filter((r) => !isNonMemberRole(r.role, r.degree)).map((r) => r._id);
 }
 
 /**
@@ -93,10 +98,12 @@ export async function assertTransactionOwnerInFinanceScope(reqUser, ownerUserId)
   const globalViewer = isGlobalFinanceViewer(reqUser);
   if (globalViewer) return true;
 
-  // Group boss AND plain member can view any transaction in their own group.
-  const owner = await User.findById(ownerUserId).select("group").lean();
+  // Group boss AND plain member can view any transaction in their own group,
+  // but never an admin's or finance manager's.
+  const owner = await User.findById(ownerUserId).select("group role degree").lean();
   if (!owner) return false;
-  return owner.group === reqUser.group;
+  if (isNonMemberRole(owner.role, owner.degree)) return false;
+  return !!owner.group && owner.group === reqUser.group;
 }
 
 export async function assertUserIdInFinanceScope(reqUser, targetUserId) {
@@ -104,8 +111,10 @@ export async function assertUserIdInFinanceScope(reqUser, targetUserId) {
   const globalViewer = isGlobalFinanceViewer(reqUser);
   if (globalViewer) return true;
 
-  const target = await User.findById(targetUserId).select("group").lean();
+  const target = await User.findById(targetUserId).select("group role degree").lean();
   if (!target) return false;
+  // Admins' and finance managers' finance: global finance viewers only.
+  if (isNonMemberRole(target.role, target.degree)) return false;
 
   const norm = normalizeRole(reqUser.role, reqUser.degree);
   if (norm === ROLES.GROUP_MEMBER) {

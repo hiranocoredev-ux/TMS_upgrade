@@ -20,18 +20,19 @@ export const excludeSuperAdmin = (users) => {
 };
 
 /**
- * Users who can hold transactions: everyone except the super admin and the
- * finance manager. Unlike excludeSuperAdmin, this keeps the Admin role, whose
- * income is recorded as transactions too.
+ * Users listed on the Transactions page.
+ * - Super admin, Admin and finance manager viewers: team members plus Admin and
+ *   finance manager accounts (their transactions are visible to these roles only).
+ * - Group bosses and members: team members only.
+ * The super admin's own account is never listed.
  * @param {Array} users - Array of user objects
+ * @param {Boolean} viewerSeesStaff - viewer is super admin, Admin or finance manager
  * @returns {Array}
  */
-export const excludeNonTransactionUsers = (users) => {
+export const transactionListUsers = (users, viewerSeesStaff) => {
   if (!Array.isArray(users)) return [];
-  return users.filter((user) => {
-    const role = user.role || user.user?.role;
-    return role !== ROLES.SUPER_ADMIN && role !== ROLES.FINANCE_MANAGER;
-  });
+  if (!viewerSeesStaff) return excludeSuperAdmin(users);
+  return users.filter((user) => (user.role || user.user?.role) !== ROLES.SUPER_ADMIN);
 };
 
 /**
