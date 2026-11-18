@@ -40,8 +40,7 @@ const financeGoalSchema = new mongoose.Schema({
 // Compound unique index: one goal per user per month
 financeGoalSchema.index({ userId: 1, month: 1 }, { unique: true });
 
-// Index for querying by month
-financeGoalSchema.index({ month: 1 });
+// month: indexed on the field itself (index: true).
 
 export default mongoose.model('FinanceGoal', financeGoalSchema);
 

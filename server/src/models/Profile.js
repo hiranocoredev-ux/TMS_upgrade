@@ -159,7 +159,7 @@ profileSchema.index({ status: 1, createdAt: -1 });
 profileSchema.index({ group: 1, status: 1 });
 profileSchema.index({ countryCode: 1, status: 1 });
 profileSchema.index({ workingRoles: 1 });
-profileSchema.index({ ownerUserId: 1 });
+// ownerUserId: indexed on the field itself (index: true).
 profileSchema.index({ huntingOwnerId: 1 });
 profileSchema.index({ 'workingRoleTabs.managers.userId': 1 });
 profileSchema.index({ name: 'text', email: 'text', comment: 'text' });

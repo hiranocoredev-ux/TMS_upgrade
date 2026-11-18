@@ -44,8 +44,7 @@ const monthlyFinancialPlanSchema = new mongoose.Schema({
 // Compound unique index: one plan per user per month
 monthlyFinancialPlanSchema.index({ userId: 1, month: 1 }, { unique: true });
 
-// Index for querying by month
-monthlyFinancialPlanSchema.index({ month: 1 });
+// month: indexed on the field itself (index: true).
 
 // Index for querying by user
 monthlyFinancialPlanSchema.index({ userId: 1, month: -1 });

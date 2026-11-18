@@ -535,7 +535,7 @@ interviewTicketSchema.index({ boardId: 1, createdAt: -1 });
 interviewTicketSchema.index({ ownerUserId: 1, status: 1 });
 interviewTicketSchema.index({ jobProfileId: 1, status: 1 });
 interviewTicketSchema.index({ 'dates.scheduledAt': 1 });
-interviewTicketSchema.index({ 'dates.scheduledDay': 1 });
+// dates.scheduledDay: indexed on the field itself (index: true).
 interviewTicketSchema.index({ dueDate: 1, status: 1 });
 
 export default mongoose.model('InterviewTicket', interviewTicketSchema);
