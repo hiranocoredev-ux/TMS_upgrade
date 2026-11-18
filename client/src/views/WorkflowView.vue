@@ -224,6 +224,59 @@
       <button class="focus-banner__clear" @click="clearFocus" type="button">Show all</button>
     </div>
 
+    <!-- ── Added time waiting for approval (super admin / admin) ── -->
+    <div v-if="isFullAdmin && pendingManualItems.length" class="wf-card pending-card">
+      <div class="pending-card__head">
+        <button type="button" class="pending-card__toggle" @click="pendingManualOpen = !pendingManualOpen">
+          <span class="pending-card__badge">{{ pendingManualItems.length }}</span>
+          Added time waiting for approval
+          <span class="pending-card__chevron">{{ pendingManualOpen ? '▾' : '▸' }}</span>
+        </button>
+        <button
+          v-if="pendingManualOpen && pendingManualItems.length > 1"
+          type="button"
+          class="btn btn--primary btn--sm"
+          :disabled="pendingManualLoading"
+          @click="approveAllPending"
+        >Approve all</button>
+      </div>
+      <p v-if="pendingManualOpen" class="pending-card__hint">
+        Submitted by group bosses. It is not on the chart or in any total until you approve it.
+      </p>
+      <div v-if="pendingManualOpen" class="pending-list">
+        <div v-for="item in pendingManualItems" :key="item.entryId" class="pending-row">
+          <UserAvatar :name="item.userName" :profile-image="item.avatarUrl || ''" :size="28" :tooltip="false" />
+          <div class="pending-row__main">
+            <div class="pending-row__title">
+              <strong>{{ item.userName }}</strong>
+              <span v-if="item.group" class="pending-row__group">Group {{ item.group }}</span>
+              <span class="pending-row__dur">+{{ formatPendingDuration(item.seconds) }}</span>
+              <span class="pending-row__date">{{ item.date }}</span>
+            </div>
+            <div class="pending-row__meta">
+              <span v-if="item.shortReason">{{ item.shortReason }}</span>
+              <span v-if="item.description" class="pending-row__desc">{{ item.description }}</span>
+              <span v-if="item.addedByName" class="pending-row__by">Added by {{ item.addedByName }}</span>
+            </div>
+          </div>
+          <div class="pending-row__actions">
+            <button
+              type="button"
+              class="btn btn--primary btn--sm"
+              :disabled="!!pendingReviewBusy[item.entryId] || pendingManualLoading"
+              @click="reviewPendingEntry(item, 'approve')"
+            >Approve</button>
+            <button
+              type="button"
+              class="btn btn--danger-outline btn--sm"
+              :disabled="!!pendingReviewBusy[item.entryId] || pendingManualLoading"
+              @click="reviewPendingEntry(item, 'reject')"
+            >Reject</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Chart Card ────────────────────────────────── -->
     <div class="wf-card chart-card">
       <div v-if="finalSyncLoading" class="sync-overlay">
@@ -245,6 +298,18 @@
             :class="['chart-canvas', { 'chart-canvas--clickable': chartMemberDetailInteractive }]"
             :style="chartCanvasStyle"
           ></canvas>
+        </div>
+
+        <div class="chart-legend" :class="{ 'chart-legend--dark': effectiveTheme === 'dark' }" aria-label="Chart colours">
+          <span class="chart-legend__item">
+            <span class="chart-legend__swatch chart-legend__swatch--met"></span>Base time (target met)
+          </span>
+          <span class="chart-legend__item">
+            <span class="chart-legend__swatch chart-legend__swatch--below"></span>Base time (below target)
+          </span>
+          <span class="chart-legend__item">
+            <span class="chart-legend__swatch chart-legend__swatch--added"></span>Added time (approved)
+          </span>
         </div>
 
         <div class="graph-breakdown" role="group" aria-label="How to group chart bars">
@@ -314,6 +379,10 @@
           </div>
 
           <div class="modal-body">
+            <p v-if="isGroupBossUser" class="modal-approval-note">
+              You can add time for members of your own group. It goes to a super admin or admin
+              for approval and shows on the chart only after it is approved.
+            </p>
             <!-- Member select -->
             <div class="form-group">
               <label class="form-label">Members</label>
@@ -325,10 +394,10 @@
                     :disabled="usersLoading"
                     @change="toggleApplyToAll(($event.target).checked)"
                   />
-                  <span>Select All Users</span>
+                  <span>{{ isFullAdmin ? 'Select All Users' : 'Select all members of my group' }}</span>
                 </label>
                 <div v-if="!modalForm.applyToAll" class="member-picker__list">
-                  <label v-for="u in users" :key="u._id" class="member-picker__item">
+                  <label v-for="u in addTimeUsers" :key="u._id" class="member-picker__item">
                     <input
                       type="checkbox"
                       class="member-picker__checkbox"
@@ -462,6 +531,8 @@ import {
   getWorktimeTargets,
   getWorkflowFinalSyncStatus,
   triggerWorkflowFinalSync,
+  getPendingManualTime,
+  reviewManualTime,
 } from '../services/workflow';
 import TmsNativeCalendarField from '../components/ui/TmsNativeCalendarField.vue';
 import UserAvatar from '../components/UserAvatar.vue';
@@ -477,36 +548,26 @@ const toast = useToast();
 const { effectiveTheme } = useThemeAppearance();
 const authStore = useAuthStore();
 
-/** Stacked bar colors: soft success (met target) vs soft warning (below target). */
+/**
+ * Approved added (manual) time: one blue, whatever the target state, so it
+ * always stands apart from the base (tracked) part below it.
+ */
+const ADDED_TIME_COLORS = Object.freeze({
+  light: { added: 'rgba(59, 130, 246, 0.88)', addedHover: 'rgba(37, 99, 235, 0.95)' },
+  dark: { added: 'rgba(96, 165, 250, 0.85)', addedHover: 'rgba(59, 130, 246, 0.95)' },
+});
+
+/** Stacked bar colors: base part green (met target) or orange (below target); added part blue. */
 function worktimeStackColors(achieved, dark) {
+  const added = dark ? ADDED_TIME_COLORS.dark : ADDED_TIME_COLORS.light;
   if (achieved) {
     return dark
-      ? {
-          tracked: 'rgba(52, 211, 153, 0.82)',
-          trackedHover: 'rgba(16, 185, 129, 0.93)',
-          added: 'rgba(167, 243, 208, 0.76)',
-          addedHover: 'rgba(110, 231, 183, 0.88)',
-        }
-      : {
-          tracked: 'rgba(45, 166, 134, 0.86)',
-          trackedHover: 'rgba(32, 139, 112, 0.94)',
-          added: 'rgba(132, 217, 184, 0.9)',
-          addedHover: 'rgba(98, 196, 159, 0.95)',
-        };
+      ? { tracked: 'rgba(52, 211, 153, 0.82)', trackedHover: 'rgba(16, 185, 129, 0.93)', ...added }
+      : { tracked: 'rgba(45, 166, 134, 0.86)', trackedHover: 'rgba(32, 139, 112, 0.94)', ...added };
   }
   return dark
-    ? {
-        tracked: 'rgba(251, 191, 36, 0.76)',
-        trackedHover: 'rgba(245, 158, 11, 0.9)',
-        added: 'rgba(253, 224, 154, 0.7)',
-        addedHover: 'rgba(252, 211, 77, 0.85)',
-      }
-    : {
-        tracked: 'rgba(234, 162, 94, 0.88)',
-        trackedHover: 'rgba(214, 134, 62, 0.94)',
-        added: 'rgba(244, 208, 164, 0.9)',
-        addedHover: 'rgba(235, 182, 126, 0.95)',
-      };
+    ? { tracked: 'rgba(251, 191, 36, 0.76)', trackedHover: 'rgba(245, 158, 11, 0.9)', ...added }
+    : { tracked: 'rgba(234, 162, 94, 0.88)', trackedHover: 'rgba(214, 134, 62, 0.94)', ...added };
 }
 
 function workflowChartChrome() {
@@ -816,9 +877,25 @@ const scoreListTitle = computed(() =>
     : 'Member target summary'
 );
 
-const canAddTime = computed(() =>
+/** Super Admin / Admin: their added time counts at once; they approve group bosses' time. */
+const isFullAdmin = computed(() =>
   hasAnyRole(authStore.user, [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN])
 );
+
+/** Group bosses may add time too, only for their own group, and it waits for approval. */
+const isGroupBossUser = computed(() =>
+  !isFullAdmin.value && hasAnyRole(authStore.user, [ROLES.GROUP_BOSS])
+);
+
+const canAddTime = computed(() => isFullAdmin.value || isGroupBossUser.value);
+
+/** Members the current user may add time for (a boss: their own group only). */
+const addTimeUsers = computed(() => {
+  if (isFullAdmin.value) return users.value;
+  const myGroup = String(authStore.user?.group ?? '').trim();
+  if (!myGroup || myGroup === '*') return [];
+  return users.value.filter((u) => String(u.group ?? '').trim() === myGroup);
+});
 
 /** Super Admin / Admin: add/edit/remove manual entries inside the breakdown modal */
 const canManageMemberManualDetail = computed(() =>
@@ -844,7 +921,7 @@ const currentUserId = computed(() => String(authStore.user?._id || authStore.use
 const targetMonthKey = computed(() => monthKeyOfDateKey(dateFrom.value || todayStr()));
 const isTodaySelected = computed(() => selectedDate.value === todayStr());
 const showFinalSyncControls = computed(() =>
-  canAddTime.value && viewType.value === 'byDate' && !!selectedDate.value && !isTodaySelected.value
+  isFullAdmin.value && viewType.value === 'byDate' && !!selectedDate.value && !isTodaySelected.value
 );
 
 const mySummary = computed(() => {
@@ -853,7 +930,7 @@ const mySummary = computed(() => {
   const metrics = me ? computeMemberMetrics(me) : null;
   const currentMinutes = Math.round((Number(metrics?.totalHours) || 0) * 60);
 
-  if (canAddTime.value) {
+  if (isFullAdmin.value) {
     return {
       currentMinutes,
       remainingMinutes: 0,
@@ -1358,6 +1435,11 @@ const buildChart = () => {
                   lines.push(`  • +${addedReasons.length - MAX_REASONS} more`);
                 }
               }
+              // Submitted by a group boss, not approved yet: not in the bar.
+              const pendingSecs = Number(row?.pending_add_time) || 0;
+              if (!row?.isGroupAggregate && pendingSecs > 0) {
+                lines.push('', `Waiting for approval: ${formatMinutes(Math.round(pendingSecs / 60))} (not counted)`);
+              }
               return lines;
             },
           },
@@ -1415,7 +1497,7 @@ const toggleUserSelection = (userId, checked) => {
 
 const selectedUsersCountText = computed(() => {
   if (usersLoading.value) return 'Loading users...';
-  if (modalForm.value.applyToAll) return `Selected: All users (${users.value.length})`;
+  if (modalForm.value.applyToAll) return `Selected: All users (${addTimeUsers.value.length})`;
   return `Selected: ${modalForm.value.userIds.length} user(s)`;
 });
 
@@ -1469,7 +1551,7 @@ const loadUsers = async () => {
 
 const openModal = async () => {
   if (!canAddTime.value) {
-    toast.warning('Only super admin can add time.');
+    toast.warning('Only super admins, admins and group bosses can add time.');
     return;
   }
   modalForm.value = {
@@ -1492,7 +1574,7 @@ const closeModal = () => {
 const handleAddTime = async () => {
   const { userIds, applyToAll, date, hours, minutes, shortReason, description } = modalForm.value;
 
-  const targetUserIds = applyToAll ? users.value.map((u) => u._id) : userIds;
+  const targetUserIds = applyToAll ? addTimeUsers.value.map((u) => u._id) : userIds;
   if (!targetUserIds.length) {
     toast.warning('Please select at least one user.');
     return;
@@ -1515,15 +1597,22 @@ const handleAddTime = async () => {
         addWorkflowTime({ userId: uid, date, hours: h, minutes: m, shortReason, description })
       )
     );
-    const successCount = results.filter((r) => r.status === 'fulfilled').length;
+    const fulfilled = results.filter((r) => r.status === 'fulfilled');
+    const successCount = fulfilled.length;
     const failCount = results.length - successCount;
+    const pendingCount = fulfilled.filter((r) => r.value?.data?.data?.pending).length;
+    const verb = pendingCount === successCount && successCount > 0 ? 'Submitted for approval' : 'Added';
     if (failCount === 0) {
-      toast.success(`Time added successfully for ${successCount} user(s).`);
+      toast.success(
+        pendingCount === successCount
+          ? `Submitted for approval for ${successCount} user(s). It shows on the chart once a super admin or admin approves it.`
+          : `Time added successfully for ${successCount} user(s).`
+      );
     } else {
-      toast.warning(`Added for ${successCount} user(s), failed for ${failCount} user(s).`);
+      toast.warning(`${verb} for ${successCount} user(s), failed for ${failCount} user(s).`);
     }
     closeModal();
-    await fetchChart();
+    await Promise.all([fetchChart(), fetchPendingManualTime()]);
   } catch (err) {
     toast.error(err.response?.data?.message || err.message || 'Failed to add time.');
   } finally {
@@ -1537,8 +1626,77 @@ onMounted(() => {
   fetchChart();
   fetchMonthTarget();
   fetchFinalSyncStatus();
+  fetchPendingManualTime();
   startAutoRefresh();
 });
+
+// ── Added time waiting for approval (super admin / admin) ─────────────
+const pendingManualItems = ref([]);
+const pendingManualLoading = ref(false);
+const pendingManualOpen = ref(true);
+const pendingReviewBusy = ref({}); // entryId -> true while a review is in flight
+
+const fetchPendingManualTime = async () => {
+  if (!isFullAdmin.value) return;
+  pendingManualLoading.value = true;
+  try {
+    const res = await getPendingManualTime();
+    pendingManualItems.value = res.data?.data?.items || [];
+  } catch {
+    // The API interceptor already shows the error.
+  } finally {
+    pendingManualLoading.value = false;
+  }
+};
+
+const formatPendingDuration = (seconds) => formatMinutes(Math.round((Number(seconds) || 0) / 60));
+
+const reviewPendingEntry = async (item, action) => {
+  if (!item || pendingReviewBusy.value[item.entryId]) return;
+  let reason = '';
+  if (action === 'reject') {
+    const input = window.prompt(`Reject ${formatPendingDuration(item.seconds)} for ${item.userName} on ${item.date}?\nReason (optional):`, '');
+    if (input === null) return; // cancelled
+    reason = input.trim();
+  }
+  pendingReviewBusy.value = { ...pendingReviewBusy.value, [item.entryId]: true };
+  try {
+    const res = await reviewManualTime({ worklogId: item.worklogId, entryId: item.entryId, action, reason });
+    toast.success(res.data?.message || (action === 'approve' ? 'Approved.' : 'Rejected.'));
+    pendingManualItems.value = pendingManualItems.value.filter((x) => x.entryId !== item.entryId);
+    await fetchChart();
+  } catch {
+    // Already reviewed by someone else, or another error (shown by the interceptor): refresh the list.
+    await fetchPendingManualTime();
+  } finally {
+    const next = { ...pendingReviewBusy.value };
+    delete next[item.entryId];
+    pendingReviewBusy.value = next;
+  }
+};
+
+const approveAllPending = async () => {
+  const items = [...pendingManualItems.value];
+  if (!items.length) return;
+  if (!window.confirm(`Approve all ${items.length} pending entries?`)) return;
+  pendingManualLoading.value = true;
+  let approved = 0;
+  try {
+    for (const item of items) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await reviewManualTime({ worklogId: item.worklogId, entryId: item.entryId, action: 'approve' });
+        approved += 1;
+      } catch {
+        // Shown by the interceptor (for example, already reviewed); keep going.
+      }
+    }
+  } finally {
+    pendingManualLoading.value = false;
+  }
+  if (approved) toast.success(`Approved ${approved} entr${approved === 1 ? 'y' : 'ies'}.`);
+  await Promise.all([fetchChart(), fetchPendingManualTime()]);
+};
 
 const isFilterComplete = () => {
   if (viewType.value === 'byDate') return !!selectedDate.value;
@@ -2354,5 +2512,67 @@ onUnmounted(() => {
   .summary-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* ── Chart legend: base (green / orange) vs approved added time (blue) ── */
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 18px;
+  font-size: .8rem;
+  font-weight: 600;
+  color: var(--wf-muted);
+}
+.chart-legend__item { display: inline-flex; align-items: center; gap: 6px; }
+.chart-legend__swatch { width: 14px; height: 14px; border-radius: 3px; flex: none; }
+.chart-legend__swatch--met { background: rgba(45, 166, 134, 0.86); }
+.chart-legend__swatch--below { background: rgba(234, 162, 94, 0.88); }
+.chart-legend__swatch--added { background: rgba(59, 130, 246, 0.88); }
+.chart-legend--dark .chart-legend__swatch--met { background: rgba(52, 211, 153, 0.82); }
+.chart-legend--dark .chart-legend__swatch--below { background: rgba(251, 191, 36, 0.76); }
+.chart-legend--dark .chart-legend__swatch--added { background: rgba(96, 165, 250, 0.85); }
+
+/* ── Added time waiting for approval ── */
+.pending-card { padding: 14px 16px; margin-bottom: 16px; border-left: 4px solid rgba(59, 130, 246, 0.85); }
+.pending-card__head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.pending-card__toggle {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: none; border: none; padding: 0;
+  font: inherit; font-weight: 700; font-size: .95rem;
+  color: var(--text-primary, inherit); cursor: pointer;
+}
+.pending-card__badge {
+  min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px;
+  background: rgba(59, 130, 246, 0.9); color: #fff; font-size: .75rem;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.pending-card__chevron { color: var(--wf-muted); }
+.pending-card__hint { margin: 6px 0 10px; font-size: .8rem; color: var(--wf-muted); }
+.pending-list { display: flex; flex-direction: column; gap: 8px; max-height: 360px; overflow-y: auto; }
+.pending-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border: 1px solid var(--wf-line); border-radius: 10px; background: var(--wf-elevated);
+}
+.pending-row__main { flex: 1; min-width: 0; }
+.pending-row__title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: .88rem; }
+.pending-row__group, .pending-row__date { font-size: .78rem; color: var(--wf-muted); }
+.pending-row__dur { font-weight: 700; color: rgb(37, 99, 235); }
+.pending-row__meta { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: .78rem; color: var(--wf-muted); margin-top: 2px; }
+.pending-row__desc { overflow-wrap: anywhere; }
+.pending-row__by { font-style: italic; }
+.pending-row__actions { display: flex; gap: 6px; flex: none; }
+.btn--sm { height: 32px; padding: .25rem .65rem; }
+.btn--danger-outline { background: transparent; color: #dc2626; border-color: rgba(220, 38, 38, 0.55); }
+.btn--danger-outline:hover:not(:disabled) { background: rgba(220, 38, 38, 0.08); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.modal-approval-note {
+  margin: 0 0 12px; padding: 8px 10px; border-radius: 8px; font-size: .8rem;
+  background: rgba(59, 130, 246, 0.1); color: var(--text-primary, inherit);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+@media (max-width: 640px) {
+  .pending-row { flex-wrap: wrap; }
+  .pending-row__actions { width: 100%; justify-content: flex-end; }
 }
 </style>

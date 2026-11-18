@@ -6,6 +6,20 @@ const manualAdjustmentSubSchema = new mongoose.Schema(
     description: { type: String, default: '' },
     // Short, tooltip-friendly reason shown on the worktime graph hover.
     shortReason: { type: String, default: '' },
+    /**
+     * Only `approved` time counts (add_time, charts, achievement, competition).
+     * Time a group boss adds starts `pending` until a super admin / admin
+     * approves it; time they add themselves is approved at once. Entries from
+     * before this field existed have no value and count as approved.
+     */
+    status: { type: String, enum: ['approved', 'pending', 'rejected'], default: 'approved' },
+    addedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    addedByName: { type: String, default: '' },
+    addedByRole: { type: String, default: '' },
+    reviewedByUserId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+    reviewedByName: { type: String, default: '' },
+    reviewedAt: { type: Date },
+    rejectReason: { type: String, default: '' },
   },
   { _id: true, timestamps: true }
 );
@@ -48,7 +62,7 @@ const worklogSchema = new mongoose.Schema(
         note: {
             type: String,
         },
-        /** Line-items for super-admin manual time (sum must match numeric add_time). */
+        /** Line-items for manual time (add_time = the sum of the APPROVED ones). */
         manualAdjustments: { type: [manualAdjustmentSubSchema], default: [] },
     },
     { timestamps: true }

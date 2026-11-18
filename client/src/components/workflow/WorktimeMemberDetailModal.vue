@@ -130,6 +130,10 @@
                     <span>Tracked {{ formatDuration(detail.rangeTrackedSeconds) }}</span>
                     <span class="wmt-stat-line__dot" aria-hidden="true">·</span>
                     <span>Manual {{ formatDuration(detail.rangeAddedSeconds) }}</span>
+                    <template v-if="detail.rangePendingSeconds > 0">
+                      <span class="wmt-stat-line__dot" aria-hidden="true">·</span>
+                      <span>Waiting for approval {{ formatDuration(detail.rangePendingSeconds) }}</span>
+                    </template>
                   </div>
 
                   <div v-if="visibleDays.length === 0" class="wmt-empty">No activity in this range.</div>
@@ -182,8 +186,16 @@
                               <div class="wmt-adj-time">
                                 {{ formatDuration(adj.seconds) }}
                                 <span v-if="adj.shortReason" class="wmt-adj-reason">{{ adj.shortReason }}</span>
+                                <span
+                                  v-if="adj.status === 'pending' || adj.status === 'rejected'"
+                                  :class="['wmt-adj-status', `wmt-adj-status--${adj.status}`]"
+                                >{{ adj.status === 'pending' ? 'Waiting for approval' : 'Rejected' }}</span>
                               </div>
                               <p class="wmt-adj-note">{{ adj.description || '—' }}</p>
+                              <p v-if="adj.addedByName || adj.rejectReason" class="wmt-adj-by">
+                                <span v-if="adj.addedByName">Added by {{ adj.addedByName }}</span>
+                                <span v-if="adj.status === 'rejected' && adj.rejectReason"> · Reason: {{ adj.rejectReason }}</span>
+                              </p>
                             </div>
                             <div v-if="allowManage" class="wmt-adj-row-actions">
                               <button type="button" class="wmt-text-btn" @click="startEdit(day, adj)">Edit</button>
@@ -1053,4 +1065,16 @@ const removeEntry = async (day, adj) => {
     justify-content: flex-end;
   }
 }
+
+.wmt-adj-status {
+  margin-left: 8px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  vertical-align: middle;
+}
+.wmt-adj-status--pending { background: rgba(59, 130, 246, 0.14); color: rgb(37, 99, 235); }
+.wmt-adj-status--rejected { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
+.wmt-adj-by { margin: 2px 0 0; font-size: 0.75rem; opacity: 0.75; }
 </style>

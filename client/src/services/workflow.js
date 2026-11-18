@@ -6,8 +6,9 @@ export const getWorkflowChartData = (params = {}) =>
 export const getWorkflowUsers = () =>
   apiClient.get('/workflow/users');
 
+// The page shows one summary message for the whole batch.
 export const addWorkflowTime = (payload) =>
-  apiClient.post('/workflow/add-time', payload);
+  apiClient.post('/workflow/add-time', payload, { silentSuccess: true });
 
 /** Super-admin: per-member manual-time breakdown for chart date range ([date_from, date_to)). */
 export const getWorkflowManualTimeDetail = (params = {}) =>
@@ -49,3 +50,11 @@ export const getWorkflowFinalSyncStatus = (date) =>
 // The page shows its own success message, so skip the generic one.
 export const triggerWorkflowFinalSync = (date) =>
   apiClient.post('/workflow/final-sync', { date }, { silentSuccess: true });
+
+/** Super admin / admin: added time from group bosses waiting for approval. */
+export const getPendingManualTime = () =>
+  apiClient.get('/workflow/manual-time/pending');
+
+/** Super admin / admin: approve or reject one pending entry. The page shows its own message. */
+export const reviewManualTime = (payload) =>
+  apiClient.post('/workflow/manual-time/review', payload, { silentSuccess: true });

@@ -29,7 +29,7 @@ const MINUTES = Number(process.argv[4] || 30);
 const MARKER = `[seed:add-manual-time ${EMAIL} ${DATE} ${MINUTES}m]`;
 
 const sumSeconds = (adjustments = []) =>
-  adjustments.reduce((s, a) => s + Math.max(0, Math.floor(Number(a?.seconds) || 0)), 0);
+  adjustments.reduce((s, a) => s + ((a?.status || 'approved') === 'approved' ? Math.max(0, Math.floor(Number(a?.seconds) || 0)) : 0), 0);
 
 const run = async () => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(DATE)) throw new Error(`Bad date: ${DATE} (use YYYY-MM-DD)`);

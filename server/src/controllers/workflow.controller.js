@@ -10,12 +10,26 @@ import WorktimeFinalSync from '../models/WorktimeFinalSync.js';
 import CompetitionWorktimeDayRule from '../models/CompetitionWorktimeDayRule.js';
 import CompetitionWorktimeUserDayRule from '../models/CompetitionWorktimeUserDayRule.js';
 import { buildDayTargets, DEFAULT_TARGET_MINUTES as SHARED_DEFAULT_TARGET_MINUTES } from '../services/worktimeTargets.js';
-import { normalizeRole, ROLES, isNonMemberRole, isFinanceManagerRole } from '../constants/roles.js';
+import { normalizeRole, ROLES, isNonMemberRole, isFinanceManagerRole, isFullAdminRole } from '../constants/roles.js';
 
 const LEGACY_MANUAL_ADJUSTMENT_ID = 'legacy';
 
+/**
+ * Manual time entries: only approved ones count anywhere. A group boss's entry
+ * is pending until a super admin / admin approves it; entries from before the
+ * status existed count as approved.
+ */
+const ADJ_STATUS = Object.freeze({ APPROVED: 'approved', PENDING: 'pending', REJECTED: 'rejected' });
+const adjustmentStatusOf = (adj) => adj?.status || ADJ_STATUS.APPROVED;
+const isApprovedAdjustment = (adj) => adjustmentStatusOf(adj) === ADJ_STATUS.APPROVED;
+const adjustmentSeconds = (adj) => Math.max(0, Math.floor(Number(adj?.seconds) || 0));
+
+/** Seconds of APPROVED manual time (pending and rejected never count). */
 const sumManualAdjustmentSeconds = (adjustments = []) =>
-  adjustments.reduce((s, adj) => s + Math.max(0, Math.floor(Number(adj?.seconds) || 0)), 0);
+  adjustments.reduce((s, adj) => s + (isApprovedAdjustment(adj) ? adjustmentSeconds(adj) : 0), 0);
+
+const sumPendingAdjustmentSeconds = (adjustments = []) =>
+  adjustments.reduce((s, adj) => s + (adjustmentStatusOf(adj) === ADJ_STATUS.PENDING ? adjustmentSeconds(adj) : 0), 0);
 
 /** Keep aggregated add_time (+ total_time) aligned with tracked + adjustment line-items. */
 const syncManualTotalsIntoWorklog = (worklog) => {
@@ -57,6 +71,10 @@ const adjustmentsForDayResponseFromWorklog = (worklog) => {
       description: adj.description ? String(adj.description) : '',
       shortReason: adj.shortReason ? String(adj.shortReason) : '',
       updatedAt: adj.updatedAt ? adj.updatedAt.toISOString?.() ?? null : null,
+      status: adjustmentStatusOf(adj),
+      addedByName: adj.addedByName || '',
+      reviewedByName: adj.reviewedByName || '',
+      rejectReason: adj.rejectReason || '',
     }));
   }
   const addOnly = Math.max(0, Math.floor(Number(worklog.add_time) || 0));
@@ -69,6 +87,10 @@ const adjustmentsForDayResponseFromWorklog = (worklog) => {
       description: String(worklog.note || ''),
       shortReason: '',
       updatedAt: null,
+      status: ADJ_STATUS.APPROVED,
+      addedByName: '',
+      reviewedByName: '',
+      rejectReason: '',
     },
   ];
 };
@@ -175,8 +197,14 @@ export const getChartData = async (req, res) => {
       byMemberDay[member][w.date].add += Number(w.add_time) || 0;
 
       const adjustments = Array.isArray(w.manualAdjustments) ? w.manualAdjustments : [];
+      const pendingSecs = sumPendingAdjustmentSeconds(adjustments);
+      if (pendingSecs > 0) {
+        byMember[member].pending = (byMember[member].pending || 0) + pendingSecs;
+      }
       if (adjustments.length > 0) {
+        // Only approved time is drawn, so only approved reasons are listed.
         for (const adj of adjustments) {
+          if (!isApprovedAdjustment(adj)) continue;
           addReasonSeconds(member, adj?.shortReason, adj?.seconds);
         }
       } else {
@@ -222,6 +250,8 @@ export const getChartData = async (req, res) => {
         hubstaff_id: hubstaffId || null,
         real_time: Math.min(maxSecondsPerUser, safeReal),
         add_time: Math.min(maxSecondsPerUser, safeAdd),
+        // Added time still waiting for approval: not drawn, not counted.
+        pending_add_time: Math.max(0, Number(rec.pending) || 0),
         total_seconds: totalSeconds,
         total_hours: +(totalSeconds / 3600).toFixed(4),
         periodTargetMinutes: periodTargetMinutesByUserId.get(String(u._id)) ?? (SHARED_DEFAULT_TARGET_MINUTES * rangeDays),
@@ -294,10 +324,31 @@ export const addTime = async (req, res) => {
     const displayH = Math.floor(addSeconds / 3600);
     const displayM = Math.floor((addSeconds % 3600) / 60);
 
-    const user = await User.findById(userId).select('name hubstaff_id').lean();
+    if (!mongoose.Types.ObjectId.isValid(String(userId))) {
+      return res.status(400).json({ ok: false, message: 'Invalid userId' });
+    }
+    const user = await User.findById(userId).select('name hubstaff_id group').lean();
     if (!user) {
       return res.status(404).json({ ok: false, message: 'User not found' });
     }
+
+    // Super admin / admin: counts at once. Group boss: only for their own
+    // group's members, and it waits for a super admin / admin to approve it.
+    const actorRole = normalizeRole(req.user?.role, req.user?.degree);
+    const actorIsFullAdmin = isFullAdminRole(req.user?.role, req.user?.degree);
+    if (!actorIsFullAdmin) {
+      if (actorRole !== ROLES.GROUP_BOSS) {
+        return res.status(403).json({ ok: false, message: 'You are not allowed to add time' });
+      }
+      const actorGroup = String(req.user?.group ?? '').trim();
+      if (!actorGroup || actorGroup === '*' || String(user.group ?? '').trim() !== actorGroup) {
+        return res.status(403).json({
+          ok: false,
+          message: 'Group bosses can only add time for members of their own group',
+        });
+      }
+    }
+    const entryStatus = actorIsFullAdmin ? ADJ_STATUS.APPROVED : ADJ_STATUS.PENDING;
     if (!user.hubstaff_id) {
       return res.status(400).json({
         ok: false,
@@ -327,17 +378,24 @@ export const addTime = async (req, res) => {
       seconds: addSeconds,
       description: String(description || '').trim(),
       shortReason: String(shortReason || '').trim().slice(0, 120),
+      status: entryStatus,
+      addedByUserId: req.user?._id || undefined,
+      addedByName: String(req.user?.name || ''),
+      addedByRole: actorRole || '',
     });
     syncManualTotalsIntoWorklog(worklog);
-    if (String(description || '').trim()) {
+    if (entryStatus === ADJ_STATUS.APPROVED && String(description || '').trim()) {
       worklog.note = String(description).trim();
     }
     await worklog.save();
 
+    const pending = entryStatus === ADJ_STATUS.PENDING;
     res.json({
       ok: true,
-      data: worklog,
-      message: `Added ${displayH}h ${displayM}m for ${user.name} on ${date}`,
+      data: { worklogId: worklog._id, status: entryStatus, pending },
+      message: pending
+        ? `Submitted ${displayH}h ${displayM}m for ${user.name} on ${date} for approval`
+        : `Added ${displayH}h ${displayM}m for ${user.name} on ${date}`,
     });
   } catch (err) {
     console.error('workflow addTime error:', err.message);
@@ -874,23 +932,27 @@ export const getManualTimeDetail = async (req, res) => {
     const days = [];
     let rangeTracked = 0;
     let rangeAdded = 0;
+    let rangePending = 0;
 
     for (let dk = date_from; dk < date_to; dk = addUtcDays(dk, 1)) {
       const row = byDate.get(dk) || null;
       const tracked = row ? Math.max(0, Math.floor(Number(row.real_time) || 0)) : 0;
       const adjustments = adjustmentsForDayResponseFromWorklog(row);
       const added = adjustments.length
-        ? adjustments.reduce((s, a) => s + Math.max(0, Math.floor(Number(a.seconds) || 0)), 0)
+        ? sumManualAdjustmentSeconds(adjustments)
         : row
           ? Math.max(0, Math.floor(Number(row.add_time) || 0))
           : 0;
+      const pending = sumPendingAdjustmentSeconds(adjustments);
       rangeTracked += tracked;
       rangeAdded += added;
+      rangePending += pending;
       days.push({
         date: dk,
         worklogId: row?._id ? String(row._id) : null,
         trackedSeconds: tracked,
         addedSeconds: added,
+        pendingSeconds: pending,
         adjustments,
       });
     }
@@ -908,6 +970,7 @@ export const getManualTimeDetail = async (req, res) => {
         dateTo: date_to,
         rangeTrackedSeconds: rangeTracked,
         rangeAddedSeconds: rangeAdded,
+        rangePendingSeconds: rangePending,
         days,
       },
     });
@@ -1027,6 +1090,134 @@ export const deleteManualAdjustment = async (req, res) => {
     await worklog.save();
 
     return res.json({ ok: true, data: { worklogId: String(worklog._id) } });
+  } catch (err) {
+    return res.status(500).json({ ok: false, message: err.message });
+  }
+};
+
+/**
+ * GET /api/workflow/manual-time/pending   (super admin / admin)
+ * Added time that group bosses submitted and that is waiting for approval.
+ */
+export const listPendingManualTime = async (req, res) => {
+  try {
+    const logs = await Worklog.find({ 'manualAdjustments.status': ADJ_STATUS.PENDING })
+      .select('member date manualAdjustments')
+      .sort({ date: 1 })
+      .limit(1000)
+      .lean();
+
+    const members = [...new Set(logs.map((w) => String(w.member)))];
+    const users = members.length
+      ? await User.find({ hubstaff_id: { $in: members } }).select('name group hubstaff_id avatarUrl').lean()
+      : [];
+    const userByHub = new Map(users.map((u) => [String(u.hubstaff_id), u]));
+
+    const items = [];
+    for (const w of logs) {
+      const u = userByHub.get(String(w.member)) || null;
+      for (const adj of w.manualAdjustments || []) {
+        if (adjustmentStatusOf(adj) !== ADJ_STATUS.PENDING) continue;
+        items.push({
+          worklogId: String(w._id),
+          entryId: String(adj._id),
+          date: w.date,
+          seconds: adjustmentSeconds(adj),
+          shortReason: adj.shortReason || '',
+          description: adj.description || '',
+          userId: u?._id ? String(u._id) : null,
+          userName: u?.name || `Hubstaff ${w.member}`,
+          group: u?.group || '',
+          avatarUrl: u?.avatarUrl || '',
+          addedByName: adj.addedByName || '',
+          addedAt: adj.createdAt || null,
+        });
+      }
+    }
+    items.sort((a, b) => String(a.date).localeCompare(String(b.date)) || String(a.userName).localeCompare(String(b.userName)));
+    return res.json({ ok: true, data: { items, count: items.length } });
+  } catch (err) {
+    return res.status(500).json({ ok: false, message: err.message });
+  }
+};
+
+/**
+ * POST /api/workflow/manual-time/review   (super admin / admin)
+ * Body: { worklogId, entryId, action: 'approve' | 'reject', reason? }
+ * Only a pending entry can be reviewed; the status flip is atomic, so two
+ * reviewers cannot both act on the same entry.
+ */
+export const reviewManualTime = async (req, res) => {
+  try {
+    const { worklogId, entryId, action } = req.body || {};
+    const reason = String(req.body?.reason ?? '').trim().slice(0, 500);
+    if (!mongoose.Types.ObjectId.isValid(String(worklogId)) || !mongoose.Types.ObjectId.isValid(String(entryId))) {
+      return res.status(400).json({ ok: false, message: 'worklogId and entryId are required' });
+    }
+    if (action !== 'approve' && action !== 'reject') {
+      return res.status(400).json({ ok: false, message: "action must be 'approve' or 'reject'" });
+    }
+    const nextStatus = action === 'approve' ? ADJ_STATUS.APPROVED : ADJ_STATUS.REJECTED;
+    const entryOid = new mongoose.Types.ObjectId(String(entryId));
+
+    const updated = await Worklog.findOneAndUpdate(
+      {
+        _id: worklogId,
+        manualAdjustments: { $elemMatch: { _id: entryOid, status: ADJ_STATUS.PENDING } },
+      },
+      {
+        $set: {
+          'manualAdjustments.$.status': nextStatus,
+          'manualAdjustments.$.reviewedByUserId': req.user?._id,
+          'manualAdjustments.$.reviewedByName': String(req.user?.name || ''),
+          'manualAdjustments.$.reviewedAt': new Date(),
+          'manualAdjustments.$.rejectReason': nextStatus === ADJ_STATUS.REJECTED ? reason : '',
+        },
+      },
+      { new: true }
+    );
+
+    if (!updated) {
+      const exists = await Worklog.exists({ _id: worklogId, 'manualAdjustments._id': entryOid });
+      return exists
+        ? res.status(409).json({ ok: false, message: 'This entry has already been reviewed' })
+        : res.status(404).json({ ok: false, message: 'Entry not found' });
+    }
+
+    // Recount add_time / total_time from the approved entries inside the
+    // database, so two reviews of the same day can never leave a stale total.
+    const sub = updated.manualAdjustments.id(entryOid);
+    const approvedSum = {
+      $sum: {
+        $map: {
+          input: {
+            $filter: {
+              input: { $ifNull: ['$manualAdjustments', []] },
+              cond: { $eq: [{ $ifNull: ['$$this.status', ADJ_STATUS.APPROVED] }, ADJ_STATUS.APPROVED] },
+            },
+          },
+          in: { $max: [0, { $floor: { $ifNull: ['$$this.seconds', 0] } }] },
+        },
+      },
+    };
+    const recount = {
+      add_time: { $toString: approvedSum },
+      total_time: { $max: [0, { $add: [{ $ifNull: ['$real_time', 0] }, approvedSum] }] },
+    };
+    if (nextStatus === ADJ_STATUS.APPROVED && sub?.description) {
+      recount.note = { $literal: String(sub.description) };
+    }
+    await Worklog.updateOne({ _id: updated._id }, [{ $set: recount }]);
+
+    const hrs = Math.floor((sub?.seconds || 0) / 3600);
+    const mins = Math.floor(((sub?.seconds || 0) % 3600) / 60);
+    return res.json({
+      ok: true,
+      data: { worklogId: String(updated._id), entryId: String(entryOid), status: nextStatus },
+      message: nextStatus === ADJ_STATUS.APPROVED
+        ? `Approved ${hrs}h ${mins}m on ${updated.date}`
+        : `Rejected ${hrs}h ${mins}m on ${updated.date}`,
+    });
   } catch (err) {
     return res.status(500).json({ ok: false, message: err.message });
   }

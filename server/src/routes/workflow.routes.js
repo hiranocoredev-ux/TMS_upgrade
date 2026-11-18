@@ -18,6 +18,8 @@ import {
   getManualTimeDetail,
   patchManualAdjustment,
   deleteManualAdjustment,
+  listPendingManualTime,
+  reviewManualTime,
 } from '../controllers/workflow.controller.js';
 
 const router = express.Router();
@@ -44,5 +46,8 @@ router.post('/final-sync', requireRole('SUPER_ADMIN'), triggerFinalSync);
 router.get('/manual-time-detail', getManualTimeDetail);
 router.patch('/manual-time-entry', requireRole('SUPER_ADMIN'), patchManualAdjustment);
 router.delete('/manual-time-entry', requireRole('SUPER_ADMIN'), deleteManualAdjustment);
+// Added time from group bosses waits here until a super admin / admin reviews it.
+router.get('/manual-time/pending', requireRole('SUPER_ADMIN'), listPendingManualTime);
+router.post('/manual-time/review', requireRole('SUPER_ADMIN'), reviewManualTime);
 
 export default router;
