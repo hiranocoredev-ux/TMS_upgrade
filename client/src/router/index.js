@@ -19,6 +19,8 @@ import {
 const REPORT_AUTHOR_AND_HISTORY_ROLES = [
   ROLES.GROUP_BOSS,
   ROLES.GROUP_MEMBER,
+  // Finance managers file their own plans and reports (finance manager tickets).
+  ROLES.FINANCE_MANAGER,
   LEGACY_ROLES.ADMIN,
   LEGACY_ROLES.MEMBER,
 ];
@@ -30,6 +32,9 @@ const REPORT_GROUP_TEAM_HISTORY_ROLES = [
 ];
 
 const REPORT_SUPER_ADMIN_ALL_TEAMS_ROLES = [ROLES.SUPER_ADMIN, ROLES.SYSTEM_ADMIN];
+
+/** Finance managers' plans/reports overview: super admin (reviews) and finance managers (read). */
+const REPORT_FINANCE_MANAGERS_ROLES = [ROLES.SUPER_ADMIN, ROLES.FINANCE_MANAGER];
 
 const router = createRouter({
   history: createWebHistory(),
@@ -328,7 +333,7 @@ const router = createRouter({
             requiresRole: REPORT_SUPER_ADMIN_ALL_TEAMS_ROLES,
             superAdminTeamsReview: true,
             // Admins' own plans/reports; only the super admin approves them.
-            adminDocuments: true,
+            staffDocuments: 'admin',
           }
         },
         {
@@ -342,7 +347,7 @@ const router = createRouter({
             requiresRole: REPORT_SUPER_ADMIN_ALL_TEAMS_ROLES,
             superAdminTeamsReview: true,
             // Admins' own plans/reports; only the super admin approves them.
-            adminDocuments: true,
+            staffDocuments: 'admin',
           }
         },
         {
@@ -356,7 +361,7 @@ const router = createRouter({
             requiresRole: REPORT_SUPER_ADMIN_ALL_TEAMS_ROLES,
             superAdminTeamsReview: true,
             // Admins' own plans/reports; only the super admin approves them.
-            adminDocuments: true,
+            staffDocuments: 'admin',
           }
         },
         {
@@ -370,7 +375,7 @@ const router = createRouter({
             requiresRole: REPORT_SUPER_ADMIN_ALL_TEAMS_ROLES,
             superAdminTeamsReview: true,
             // Admins' own plans/reports; only the super admin approves them.
-            adminDocuments: true,
+            staffDocuments: 'admin',
           }
         },
         {
@@ -384,7 +389,7 @@ const router = createRouter({
             requiresRole: REPORT_SUPER_ADMIN_ALL_TEAMS_ROLES,
             superAdminTeamsReview: true,
             // Admins' own plans/reports; only the super admin approves them.
-            adminDocuments: true,
+            staffDocuments: 'admin',
           }
         },
         {
@@ -398,7 +403,97 @@ const router = createRouter({
             requiresRole: REPORT_SUPER_ADMIN_ALL_TEAMS_ROLES,
             superAdminTeamsReview: true,
             // Admins' own plans/reports; only the super admin approves them.
-            adminDocuments: true,
+            staffDocuments: 'admin',
+          }
+        },
+        {
+          path: 'dailyreports/finance-managers',
+          name: 'allFinanceManagers',
+          component: () => import('../views/AllGroupReportHistory.vue'),
+          meta: {
+            title: 'All Finance Managers Daily Reports',
+            reportPeriod: 'daily',
+            documentKind: 'report',
+            requiresRole: REPORT_FINANCE_MANAGERS_ROLES,
+            deniedForSystemAdmin: true,
+            superAdminTeamsReview: true,
+            // Finance managers' own plans/reports; only the super admin approves them.
+            staffDocuments: 'finance',
+          }
+        },
+        {
+          path: 'dailyreports/finance-managers-weekly',
+          name: 'allFinanceManagersWeekly',
+          component: () => import('../views/AllGroupReportHistory.vue'),
+          meta: {
+            title: 'All Finance Managers Weekly Reports',
+            reportPeriod: 'weekly',
+            documentKind: 'report',
+            requiresRole: REPORT_FINANCE_MANAGERS_ROLES,
+            deniedForSystemAdmin: true,
+            superAdminTeamsReview: true,
+            // Finance managers' own plans/reports; only the super admin approves them.
+            staffDocuments: 'finance',
+          }
+        },
+        {
+          path: 'dailyreports/finance-managers-monthly',
+          name: 'allFinanceManagersMonthly',
+          component: () => import('../views/AllGroupReportHistory.vue'),
+          meta: {
+            title: 'All Finance Managers Monthly Reports',
+            reportPeriod: 'monthly',
+            documentKind: 'report',
+            requiresRole: REPORT_FINANCE_MANAGERS_ROLES,
+            deniedForSystemAdmin: true,
+            superAdminTeamsReview: true,
+            // Finance managers' own plans/reports; only the super admin approves them.
+            staffDocuments: 'finance',
+          }
+        },
+        {
+          path: 'dailyreports/finance-manager-plans',
+          name: 'allFinanceManagerPlans',
+          component: () => import('../views/AllGroupReportHistory.vue'),
+          meta: {
+            title: 'All Finance Managers Daily Plans',
+            reportPeriod: 'daily',
+            documentKind: 'plan',
+            requiresRole: REPORT_FINANCE_MANAGERS_ROLES,
+            deniedForSystemAdmin: true,
+            superAdminTeamsReview: true,
+            // Finance managers' own plans/reports; only the super admin approves them.
+            staffDocuments: 'finance',
+          }
+        },
+        {
+          path: 'dailyreports/finance-manager-plans-weekly',
+          name: 'allFinanceManagerPlansWeekly',
+          component: () => import('../views/AllGroupReportHistory.vue'),
+          meta: {
+            title: 'All Finance Managers Weekly Plans',
+            reportPeriod: 'weekly',
+            documentKind: 'plan',
+            requiresRole: REPORT_FINANCE_MANAGERS_ROLES,
+            deniedForSystemAdmin: true,
+            superAdminTeamsReview: true,
+            // Finance managers' own plans/reports; only the super admin approves them.
+            staffDocuments: 'finance',
+          }
+        },
+        {
+          path: 'dailyreports/finance-manager-plans-monthly',
+          name: 'allFinanceManagerPlansMonthly',
+          component: () => import('../views/AllGroupReportHistory.vue'),
+          meta: {
+            title: 'All Finance Managers Monthly Plans',
+            reportPeriod: 'monthly',
+            documentKind: 'plan',
+            requiresRole: REPORT_FINANCE_MANAGERS_ROLES,
+            deniedForSystemAdmin: true,
+            superAdminTeamsReview: true,
+            // Finance managers' own plans/reports; only the super admin approves them.
+            staffDocuments: 'finance',
           }
         },
         {

@@ -110,6 +110,25 @@ export const FINANCE_MANAGER_ROUTE_NAMES = new Set([
   'SummarizeMonthly',
   'MyProfile',
   'Forbidden',
+  // Their own plans and reports (finance manager tickets), and the finance managers' overview.
+  'dailyreport',
+  'weeklyreport',
+  'monthlyreport',
+  'dailyplan',
+  'weeklyplan',
+  'monthlyplan',
+  'reportHistory',
+  'weeklyReportHistory',
+  'monthlyReportHistory',
+  'planHistory',
+  'weeklyPlanHistory',
+  'monthlyPlanHistory',
+  'allFinanceManagers',
+  'allFinanceManagersWeekly',
+  'allFinanceManagersMonthly',
+  'allFinanceManagerPlans',
+  'allFinanceManagerPlansWeekly',
+  'allFinanceManagerPlansMonthly',
 ]);
 
 export const getRoleDisplayName = (role, degree) => {

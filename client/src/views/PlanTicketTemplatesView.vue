@@ -3,8 +3,8 @@
     <header class="page-header">
       <h1>{{ pageTitle }}</h1>
       <p class="page-subtitle">
-        <template v-if="audience === 'admin'">
-          Tickets on the Admins' own {{ activePeriod }} plans.
+        <template v-if="audience !== 'member'">
+          Tickets on the {{ audience === 'admin' ? 'Admins' : 'finance managers' }}' own {{ activePeriod }} plans.
           {{ canEditRows ? 'Only you (super admin) can change them.' : 'Only the super admin can change them.' }}
         </template>
         <template v-else>
@@ -28,13 +28,20 @@
       >
         Admins
       </router-link>
+      <router-link
+        :to="{ name: templateRouteName(activePeriod), query: { audience: 'finance' } }"
+        class="period-tab"
+        :class="{ 'is-active': audience === 'finance' }"
+      >
+        Finance managers
+      </router-link>
     </nav>
 
     <nav class="period-tabs" aria-label="Switch period">
       <router-link
         v-for="p in periods"
         :key="p"
-        :to="{ name: templateRouteName(p), query: audience === 'admin' ? { audience: 'admin' } : {} }"
+        :to="{ name: templateRouteName(p), query: audience === 'member' ? {} : { audience } }"
         class="period-tab"
         :class="{ 'is-active': activePeriod === p }"
       >
@@ -110,13 +117,15 @@ import {
 const toast = useToast();
 const route = useRoute();
 const authStore = useAuthStore();
-/** 'member' (team plans) or 'admin' (the Admin role's own plans), from ?audience=admin. */
-const audience = computed(() => (route.query?.audience === 'admin' ? 'admin' : 'member'));
+/** 'member' (team plans), 'admin' or 'finance' (those roles' own plans), from ?audience=. */
+const audience = computed(() =>
+  ['admin', 'finance'].includes(route.query?.audience) ? route.query.audience : 'member'
+);
 const isSuperAdminViewer = computed(
   () => normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SUPER_ADMIN
 );
-/** Admin tickets: super admin only. Team tickets: as before (super admin and Admin). */
-const canEditRows = computed(() => audience.value !== 'admin' || isSuperAdminViewer.value);
+/** Admin and finance manager tickets: super admin only. Team tickets: as before (super admin and Admin). */
+const canEditRows = computed(() => audience.value === 'member' || isSuperAdminViewer.value);
 const periods = ['daily', 'weekly', 'monthly'];
 const activePeriod = ref('daily');
 
@@ -136,7 +145,10 @@ function syncPeriodFromRoute() {
 }
 
 const pageTitle = computed(
-  () => `${periodLabel(activePeriod.value)} ${audience.value === 'admin' ? 'admin ' : ''}plan ticket templates`
+  () =>
+    `${periodLabel(activePeriod.value)} ${
+      { admin: 'admin ', finance: 'finance manager ' }[audience.value] || ''
+    }plan ticket templates`
 );
 const rows = ref([]);
 const loading = ref(false);

@@ -21,12 +21,13 @@ const planTicketTemplateSchema = new mongoose.Schema(
       maxlength: 200
     },
     /**
-     * Whose plans use this ticket: group members/bosses ('member') or admins
-     * ('admin'). Rows from before this field existed are member tickets.
+     * Whose plans use this ticket: group members/bosses ('member'), admins
+     * ('admin') or finance managers ('finance'). Rows from before this field
+     * existed are member tickets.
      */
     audience: {
       type: String,
-      enum: ['member', 'admin'],
+      enum: ['member', 'admin', 'finance'],
       default: 'member'
     },
     sortOrder: {

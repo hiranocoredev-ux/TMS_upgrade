@@ -116,7 +116,7 @@ const props = defineProps({
   previousPlanDoc: { type: Object, default: null },
   userId: { type: String, default: '' },
   editable: { type: Boolean, default: true },
-  /** 'admin': an admin's own plan (admin tickets, no finance target). */
+  /** 'admin' / 'finance': an admin's or finance manager's own plan (their tickets, no finance target). */
   audience: { type: String, default: 'member' }
 });
 
@@ -124,7 +124,7 @@ const emit = defineEmits(['update:sections', 'finance-status']);
 
 /** Monthly and weekly plans open with the income / outcome target. */
 const hasFinanceTicket = computed(
-  () => props.audience !== 'admin' && (props.period === 'monthly' || props.period === 'weekly')
+  () => props.audience === 'member' && (props.period === 'monthly' || props.period === 'weekly')
 );
 const financeLabel = computed(() => `1. ${FINANCE_TICKET_TITLES.plan}`);
 const financeNotes = ref('');

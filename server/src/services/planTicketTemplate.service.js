@@ -2,13 +2,14 @@ import PlanTicketTemplate from '../models/PlanTicketTemplate.js';
 import {
   PLAN_TICKET_DEFAULTS_BY_PERIOD,
   ADMIN_PLAN_TICKET_DEFAULTS_BY_PERIOD,
+  FINANCE_PLAN_TICKET_DEFAULTS_BY_PERIOD,
   PLAN_TICKET_PERIODS,
   PLAN_TICKET_AUDIENCES
 } from '../constants/planTicketDefaults.js';
 
 const LEGACY_BITTENSOR_TASK_TITLE = 'Working on Task (or Bittensor)';
 
-/** 'admin' or 'member' (anything else, including nothing, means member). */
+/** 'admin', 'finance' or 'member' (anything else, including nothing, means member). */
 export function normalizeAudience(audience) {
   const a = String(audience || '').toLowerCase();
   return PLAN_TICKET_AUDIENCES.includes(a) ? a : 'member';
@@ -16,9 +17,8 @@ export function normalizeAudience(audience) {
 
 /** Mongo filter for one audience; member tickets saved before the field existed have none. */
 export function audienceFilter(audience) {
-  return normalizeAudience(audience) === 'admin'
-    ? { audience: 'admin' }
-    : { audience: { $ne: 'admin' } };
+  const a = normalizeAudience(audience);
+  return a === 'member' ? { audience: { $nin: ['admin', 'finance'] } } : { audience: a };
 }
 
 async function migrateBittensorTaskTitle(period) {
@@ -41,7 +41,12 @@ export async function ensurePlanTicketDefaults(period, audience = 'member') {
     return;
   }
 
-  const source = aud === 'admin' ? ADMIN_PLAN_TICKET_DEFAULTS_BY_PERIOD : PLAN_TICKET_DEFAULTS_BY_PERIOD;
+  const source =
+    aud === 'admin'
+      ? ADMIN_PLAN_TICKET_DEFAULTS_BY_PERIOD
+      : aud === 'finance'
+        ? FINANCE_PLAN_TICKET_DEFAULTS_BY_PERIOD
+        : PLAN_TICKET_DEFAULTS_BY_PERIOD;
   const defaults = source[p] || [];
   if (!defaults.length) return;
 

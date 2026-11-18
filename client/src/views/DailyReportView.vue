@@ -417,15 +417,22 @@ const toast = useToast();
 const authStore = useAuthStore();
 const route = useRoute();
 /**
- * Admins (the Admin role) file their own plans and reports with the admin plan
- * tickets; they have no team and no finance targets. Their documents are kept
- * under the ADMIN group, and only the super admin approves them.
+ * Admins and finance managers file their own plans and reports with their own
+ * plan tickets; they have no team and no finance targets. Their documents are
+ * kept under the ADMIN / FINANCE group, and only the super admin approves them.
  */
-const isSystemAdminAuthor = computed(
-  () => normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SYSTEM_ADMIN
-);
-const ticketAudience = computed(() => (isSystemAdminAuthor.value ? 'admin' : 'member'));
-const documentGroup = computed(() => (isSystemAdminAuthor.value ? 'ADMIN' : authStore.user?.group));
+const staffAudience = computed(() => {
+  const r = normalizeRole(authStore.user?.role, authStore.user?.degree);
+  if (r === ROLES.SYSTEM_ADMIN) return 'admin';
+  if (r === ROLES.FINANCE_MANAGER) return 'finance';
+  return '';
+});
+const ticketAudience = computed(() => staffAudience.value || 'member');
+const documentGroup = computed(() => {
+  if (staffAudience.value === 'admin') return 'ADMIN';
+  if (staffAudience.value === 'finance') return 'FINANCE';
+  return authStore.user?.group;
+});
 const period = computed(() => getReportPeriod(route.meta?.reportPeriod));
 const isDailyPeriod = computed(() => period.value === 'daily');
 const isWeeklyPeriod = computed(() => period.value === REPORT_PERIODS.WEEKLY);

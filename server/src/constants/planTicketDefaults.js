@@ -26,7 +26,7 @@ export const PLAN_TICKET_DEFAULTS_BY_PERIOD = {
 export const PLAN_TICKET_PERIODS = ['daily', 'weekly', 'monthly'];
 
 /** Who a plan ticket set is for. */
-export const PLAN_TICKET_AUDIENCES = ['member', 'admin'];
+export const PLAN_TICKET_AUDIENCES = ['member', 'admin', 'finance'];
 
 /**
  * Default admin plan tickets per period (seeded when none exist). Only the
@@ -45,4 +45,19 @@ export const ADMIN_PLAN_TICKET_DEFAULTS_BY_PERIOD = {
   daily: ADMIN_TICKET_ROWS,
   weekly: ADMIN_TICKET_ROWS,
   monthly: ADMIN_TICKET_ROWS
+};
+
+/** Default finance manager plan tickets per period; keys start with FM_. */
+const FINANCE_TICKET_ROWS = [
+  { key: 'FM_TRANSACTION_REVIEW', title: 'Transaction review and approvals', sortOrder: 1 },
+  { key: 'FM_PAYMENTS', title: 'Payment requests and payouts', sortOrder: 2 },
+  { key: 'FM_PLANS_TARGETS', title: 'Financial plans and targets', sortOrder: 3 },
+  { key: 'FM_REPORTING', title: 'Reporting and reconciliation', sortOrder: 4 },
+  { key: 'FM_STUDYING_SELF', title: 'Studying self', sortOrder: 5 }
+];
+
+export const FINANCE_PLAN_TICKET_DEFAULTS_BY_PERIOD = {
+  daily: FINANCE_TICKET_ROWS,
+  weekly: FINANCE_TICKET_ROWS,
+  monthly: FINANCE_TICKET_ROWS
 };

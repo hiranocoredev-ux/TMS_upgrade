@@ -125,7 +125,7 @@
         <!-- ==========================================================================================
                              Daily Report Management     Created By : Tom(2026/2/24 11:22 AM)
         ========================================================================================== -->
-        <div v-if="!isFinanceManager" class="nav-group report-nav-group">
+        <div class="nav-group report-nav-group">
           <div @click="dailyreportMenuOpen = !dailyreportMenuOpen" class="nav-item nav-group-header"
             :class="{ active: isDailyReportRoute }">
             <span class="group-icon" aria-hidden="true">
@@ -139,7 +139,14 @@
             <span class="nav-arrow" :class="{ open: dailyreportMenuOpen }">▼</span>
           </div>
 
-          <ReportNavSubmenu v-show="dailyreportMenuOpen" :is-admin="isAdmin" :is-system-admin="isSystemAdminUser" :is-boss="isBoss" />
+          <ReportNavSubmenu
+            v-show="dailyreportMenuOpen"
+            :is-admin="isAdmin"
+            :is-system-admin="isSystemAdminUser"
+            :is-super-admin="isSuperAdmin"
+            :is-finance-manager="isFinanceManager"
+            :is-boss="isBoss"
+          />
         </div>
 
         <!-- =====================

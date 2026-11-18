@@ -3,11 +3,11 @@ import { listPlanTicketTemplates, normalizeAudience, audienceFilter } from '../s
 import { PLAN_TICKET_PERIODS } from '../constants/planTicketDefaults.js';
 import { isSuperAdminRole } from '../constants/roles.js';
 
-/** Admin plan tickets: only the super admin may change them (not the Admin role). */
+/** Admin and finance manager plan tickets: only the super admin may change them. */
 const forbidAdminTicketWrite = (req, res, audience) => {
-  if (normalizeAudience(audience) !== 'admin') return false;
+  if (normalizeAudience(audience) === 'member') return false;
   if (isSuperAdminRole(req.user?.role, req.user?.degree)) return false;
-  res.status(403).json({ ok: false, message: 'Only the super admin can manage admin plan tickets' });
+  res.status(403).json({ ok: false, message: 'Only the super admin can manage admin and finance manager plan tickets' });
   return true;
 };
 

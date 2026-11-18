@@ -20,7 +20,7 @@
       </div>
 
       <p v-if="adminMode" class="admin-mode-note">
-        Plans and reports of the Admin role. {{ isSuperAdminViewer ? 'You approve or reject them.' : 'Only the super admin approves or rejects them.' }}
+        {{ staffLabels.note }} {{ isSuperAdminViewer ? 'You approve or reject them.' : 'Only the super admin approves or rejects them.' }}
       </p>
 
       <div v-if="!adminMode" class="filter-group">
@@ -66,7 +66,7 @@
           <thead>
             <tr>
               <th class="col-group">Group</th>
-              <th class="col-member">{{ adminMode ? 'Admin' : 'Member' }}</th>
+              <th class="col-member">{{ adminMode ? staffLabels.person : 'Member' }}</th>
               <th class="col-state">State</th>
               <th class="col-created">Created</th>
             </tr>
@@ -100,7 +100,7 @@
             </tr>
 
             <tr v-if="filteredData.length === 0">
-              <td colspan="4" class="no-data">{{ adminMode ? 'No admins or no matches for this period / search' : 'No team members or no matches for this period / search' }}</td>
+              <td colspan="4" class="no-data">{{ adminMode ? staffLabels.empty : 'No team members or no matches for this period / search' }}</td>
             </tr>
           </tbody>
         </table>
@@ -112,7 +112,7 @@
         v-if="s_reportId"
         :key="`${documentKind}-${s_reportId}`"
         :p_id="s_reportId"
-        :admin-documents="adminMode"
+        :staff-documents="staffKind"
       />
       <div v-else-if="selectedMissingMember && adminMode" class="empty-state">
         <p class="empty-state__title">Not submitted yet</p>
@@ -161,14 +161,28 @@ const toast = useToast();
 const route = useRoute();
 const authStore = useAuthStore();
 /** "All admins" pages: the Admin role's own plans/reports instead of the teams'. */
-const adminMode = computed(() => Boolean(route.meta?.adminDocuments));
-const ADMIN_DOCUMENT_GROUP = 'ADMIN';
+/**
+ * Staff pages: 'admin' ("All admins") or 'finance' ("All finance managers")
+ * list those roles' own plans/reports instead of the teams'.
+ */
+const staffKind = computed(() => {
+  const k = String(route.meta?.staffDocuments || '');
+  return k === 'admin' || k === 'finance' ? k : '';
+});
+const adminMode = computed(() => !!staffKind.value);
+const STAFF_DOCUMENT_GROUP = { admin: 'ADMIN', finance: 'FINANCE' };
+const STAFF_ROLE = { admin: ROLES.SYSTEM_ADMIN, finance: ROLES.FINANCE_MANAGER };
+const staffLabels = computed(() =>
+  staffKind.value === 'finance'
+    ? { note: 'Plans and reports of the finance managers.', person: 'Finance manager', empty: 'No finance managers or no matches for this period / search' }
+    : { note: 'Plans and reports of the Admin role.', person: 'Admin', empty: 'No admins or no matches for this period / search' }
+);
 const isSuperAdminViewer = computed(
   () => normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SUPER_ADMIN
 );
 /** The group a roster user's documents are filed under. */
 function rosterGroupOf(u) {
-  return adminMode.value ? ADMIN_DOCUMENT_GROUP : String(u?.group || '');
+  return adminMode.value ? STAFF_DOCUMENT_GROUP[staffKind.value] : String(u?.group || '');
 }
 const period = computed(() => getReportPeriod(route.meta?.reportPeriod));
 const documentKind = computed(() => getDocumentKindFromRoute(route));
@@ -282,7 +296,7 @@ function pickBestReport(candidates) {
 
 function rosterUsersEligible(u) {
   if (!u || u.status === 'disabled') return false;
-  if (adminMode.value) return normalizeRole(u.role, u.degree) === ROLES.SYSTEM_ADMIN;
+  if (adminMode.value) return normalizeRole(u.role, u.degree) === STAFF_ROLE[staffKind.value];
   if (['SUPER_ADMIN', 'SYSTEM_ADMIN', 'FINANCE_MANAGER'].includes(u.role || '')) return false;
   return true;
 }
@@ -294,7 +308,8 @@ function rosterMemberCountForGroup(code) {
 }
 
 function displayGroupName(code) {
-  if (code === ADMIN_DOCUMENT_GROUP) return 'Admins';
+  if (code === 'ADMIN') return 'Admins';
+  if (code === 'FINANCE') return 'Finance managers';
   const g = groups.value.find((x) => x.code === code);
   return g?.name || code || '-';
 }
@@ -494,7 +509,7 @@ watch(period, () => {
   loadStats();
 });
 
-watch(adminMode, () => {
+watch(staffKind, () => {
   s_reportId.value = '';
   s_selectedMemberKey.value = '';
 });

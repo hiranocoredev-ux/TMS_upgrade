@@ -247,12 +247,23 @@ const toast = useToast();
 const refreshReportHistorySidebar = useReportHistorySidebarRefresh();
 const authStore = useAuthStore();
 const route = useRoute();
-/** Admins' own documents: admin plan tickets, no finance block, kept under the ADMIN group. */
-const isSystemAdminAuthor = computed(
-  () => normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SYSTEM_ADMIN
-);
-const ticketAudience = computed(() => (isSystemAdminAuthor.value ? 'admin' : 'member'));
-const documentGroup = computed(() => (isSystemAdminAuthor.value ? 'ADMIN' : authStore.user?.group));
+/**
+ * Admins and finance managers file their own plans and reports with their own
+ * plan tickets; they have no team and no finance targets. Their documents are
+ * kept under the ADMIN / FINANCE group, and only the super admin approves them.
+ */
+const staffAudience = computed(() => {
+  const r = normalizeRole(authStore.user?.role, authStore.user?.degree);
+  if (r === ROLES.SYSTEM_ADMIN) return 'admin';
+  if (r === ROLES.FINANCE_MANAGER) return 'finance';
+  return '';
+});
+const ticketAudience = computed(() => staffAudience.value || 'member');
+const documentGroup = computed(() => {
+  if (staffAudience.value === 'admin') return 'ADMIN';
+  if (staffAudience.value === 'finance') return 'FINANCE';
+  return authStore.user?.group;
+});
 const period = computed(() => getReportPeriod(route.meta?.reportPeriod));
 const documentKind = computed(() => getDocumentKindFromRoute(route));
 const kindPeriodLayout = computed(

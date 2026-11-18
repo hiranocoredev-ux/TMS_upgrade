@@ -304,8 +304,8 @@ const props = defineProps({
   composeUsername: { type: String, default: '' },
   composeGroup: { type: String, default: '' },
   composeAnchorDate: { type: String, default: '' },
-  /** An admin's own plan/report ("All admins" pages): only the super admin approves, rejects or edits. */
-  adminDocuments: { type: Boolean, default: false }
+  /** 'admin' / 'finance': an admin's or finance manager's own plan/report. Only the super admin approves, rejects or edits. */
+  staffDocuments: { type: String, default: '' }
 });
 
 const emit = defineEmits(['report-saved']);
@@ -317,8 +317,8 @@ const isSuperAdminViewer = computed(
   () => normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SUPER_ADMIN
 );
 /** Admins' documents are reviewed by the super admin only; other admins just read them. */
-const canReview = computed(() => !props.adminDocuments || isSuperAdminViewer.value);
-const ticketAudience = computed(() => (props.adminDocuments ? 'admin' : 'member'));
+const canReview = computed(() => !props.staffDocuments || isSuperAdminViewer.value);
+const ticketAudience = computed(() => props.staffDocuments || 'member');
 const route = useRoute();
 const period = computed(() => getReportPeriod(route.meta?.reportPeriod));
 const documentKind = computed(() => getDocumentKindFromRoute(route));
