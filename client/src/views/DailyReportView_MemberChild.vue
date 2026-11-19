@@ -236,7 +236,7 @@ import { validateReportTicketSections } from '../utils/reportTickets';
 import ReportTicketsComposer from '../components/reports/ReportTicketsComposer.vue';
 import ReportDocumentPage from '../components/reports/ReportDocumentPage.vue';
 import ReportKindReadPage from '../components/reports/ReportKindReadPage.vue';
-import { ROLES, normalizeRole } from '../constants/roles';
+import { ROLES, normalizeRole, hasFinanceManagerRole } from '../constants/roles';
 import ReportToolbarExportPrint from '../components/reports/ReportToolbarExportPrint.vue';
 
 const props = defineProps({
@@ -254,13 +254,14 @@ const route = useRoute();
  */
 const staffAudience = computed(() => {
   const r = normalizeRole(authStore.user?.role, authStore.user?.degree);
-  if (r === ROLES.SYSTEM_ADMIN) return 'admin';
+  // An Admin who is also a finance manager files ONE plan with both ticket sets.
+  if (r === ROLES.SYSTEM_ADMIN) return hasFinanceManagerRole(authStore.user) ? 'admin+finance' : 'admin';
   if (r === ROLES.FINANCE_MANAGER) return 'finance';
   return '';
 });
 const ticketAudience = computed(() => staffAudience.value || 'member');
 const documentGroup = computed(() => {
-  if (staffAudience.value === 'admin') return 'ADMIN';
+  if (staffAudience.value === 'admin' || staffAudience.value === 'admin+finance') return 'ADMIN';
   if (staffAudience.value === 'finance') return 'FINANCE';
   return authStore.user?.group;
 });

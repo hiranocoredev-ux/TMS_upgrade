@@ -144,7 +144,7 @@
             :is-admin="isAdmin"
             :is-system-admin="isSystemAdminUser"
             :is-super-admin="isSuperAdmin"
-            :is-finance-manager="isFinanceManager"
+            :is-finance-manager="holdsFinanceManagerRole"
             :is-boss="isBoss"
           />
         </div>
@@ -370,7 +370,7 @@
             />
             <span class="user-meta">
               <span class="user-name">{{ authStore.user?.name || 'User' }}</span>
-              <span class="user-role">{{ formatRole(authStore.user?.role) }}</span>
+              <span class="user-role">{{ userRolesLabel }}</span>
             </span>
             <span class="user-menu-arrow">▾</span>
           </button>
@@ -453,7 +453,7 @@ import { useRoute } from 'vue-router';
 import { useAuthStore } from '../composables/useAuth';
 import { useThemeAppearance } from '../composables/useThemeAppearance';
 import { canViewAuditLogs, hasAnyRole } from '../utils/permissions';
-import { ROLES, LEGACY_ROLES, isFinanceManagerRole, isFullAdminRole, normalizeRole } from '../constants/roles';
+import { ROLES, LEGACY_ROLES, isFinanceManagerRole, isFullAdminRole, normalizeRole, rolesOfUser, hasFinanceManagerRole } from '../constants/roles';
 import UserAvatar from '../components/UserAvatar.vue';
 import ReportNavSubmenu from '../components/navigation/ReportNavSubmenu.vue';
 import { getReportsByUser } from '../services/reports';
@@ -584,6 +584,13 @@ watch(
 const currentPageTitle = computed(
   () => route.meta.title || 'Team Management'
 );
+
+/** "Admin + Finance Manager" when the user holds more than one role. */
+const userRolesLabel = computed(() =>
+  authStore.user ? rolesOfUser(authStore.user).map((r) => formatRole(r)).join(' + ') : ''
+);
+/** Holds the finance manager role, also as an extra role on an Admin (grants only; limits use isFinanceManager). */
+const holdsFinanceManagerRole = computed(() => hasFinanceManagerRole(authStore.user));
 
 const formatRole = (role) =>
   role === ROLES.SYSTEM_ADMIN

@@ -8,7 +8,9 @@ import {
   ROLES,
   isFinanceManagerRole,
   isSystemAdminRole,
-  canManageAllFinance,
+  rolesOfUser,
+  hasFinanceManagerRole,
+  canManageAllFinanceUser,
 } from '../constants/roles.js';
 
 dotenv.config();
@@ -91,8 +93,9 @@ export const requireRole = (...roles) => {
     // Use role mapper to check if user has any of the required roles
     // This automatically handles BOSS → ADMIN mapping
     if (!hasAnyRole(req.user, roles)) {
-      // Also check direct role match for backward compatibility
-      if (!roles.includes(req.user.role)) {
+      // Also check direct role match for backward compatibility, and extra roles
+      // (an Admin who is also a finance manager passes FINANCE_MANAGER routes).
+      if (!roles.includes(req.user.role) && !rolesOfUser(req.user).some((r) => roles.includes(r))) {
         return res.status(403).json(createErrorResponse(
           'INSUFFICIENT_PERMISSIONS',
           'Insufficient permissions'
@@ -120,7 +123,7 @@ export const requireFinanceWriter = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json(createErrorResponse('AUTH_REQUIRED', 'Authentication required'));
   }
-  if (canManageAllFinance(req.user.role, req.user.degree)) return next();
+  if (canManageAllFinanceUser(req.user)) return next();
   return res.status(403).json(createErrorResponse(
     'INSUFFICIENT_PERMISSIONS',
     isSystemAdminRole(req.user.role, req.user.degree) ? FINANCE_READ_ONLY : 'Insufficient permissions'
@@ -139,6 +142,8 @@ export const requireFinanceManager = (req, res, next) => {
       'Authentication required'
     ));
   }
+  // Anyone holding the finance manager role, also as an extra role on an Admin.
+  if (hasFinanceManagerRole(req.user)) return next();
   if (isSystemAdminRole(req.user.role, req.user.degree)) {
     return res.status(403).json(createErrorResponse('INSUFFICIENT_PERMISSIONS', FINANCE_READ_ONLY));
   }

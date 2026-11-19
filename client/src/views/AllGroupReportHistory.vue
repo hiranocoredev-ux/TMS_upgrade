@@ -112,7 +112,7 @@
         v-if="s_reportId"
         :key="`${documentKind}-${s_reportId}`"
         :p_id="s_reportId"
-        :staff-documents="staffKind"
+        :staff-documents="selectedStaffAudience"
       />
       <div v-else-if="selectedMissingMember && adminMode" class="empty-state">
         <p class="empty-state__title">Not submitted yet</p>
@@ -150,7 +150,7 @@ import {
   REPORT_PERIODS,
   formatDateLongEnUSFromKey
 } from '../utils/reportPeriod';
-import { ROLES, normalizeRole } from '../constants/roles.js';
+import { ROLES, normalizeRole, rolesOfUser } from '../constants/roles.js';
 import { useToast } from 'vue-toastification';
 import { useAuthStore } from '../composables/useAuth';
 import { provideReportHistorySidebarRefresh } from '../composables/useReportHistorySidebarRefresh';
@@ -182,7 +182,17 @@ const isSuperAdminViewer = computed(
 );
 /** The group a roster user's documents are filed under. */
 function rosterGroupOf(u) {
-  return adminMode.value ? STAFF_DOCUMENT_GROUP[staffKind.value] : String(u?.group || '');
+  if (!adminMode.value) return String(u?.group || '');
+  // An Admin who is also a finance manager files one plan, under ADMIN.
+  return normalizeRole(u?.role, u?.degree) === ROLES.SYSTEM_ADMIN ? 'ADMIN' : STAFF_DOCUMENT_GROUP[staffKind.value];
+}
+
+/** Ticket sets for a staff user's document: both for an Admin who is also a finance manager. */
+function staffAudienceOf(u) {
+  if (!adminMode.value) return '';
+  const held = rolesOfUser(u);
+  if (held.includes(ROLES.SYSTEM_ADMIN) && held.includes(ROLES.FINANCE_MANAGER)) return 'admin+finance';
+  return staffKind.value;
 }
 const period = computed(() => getReportPeriod(route.meta?.reportPeriod));
 const documentKind = computed(() => getDocumentKindFromRoute(route));
@@ -296,7 +306,8 @@ function pickBestReport(candidates) {
 
 function rosterUsersEligible(u) {
   if (!u || u.status === 'disabled') return false;
-  if (adminMode.value) return normalizeRole(u.role, u.degree) === STAFF_ROLE[staffKind.value];
+  // Staff pages list everyone holding that role, also as an extra role.
+  if (adminMode.value) return rolesOfUser(u).includes(STAFF_ROLE[staffKind.value]);
   if (['SUPER_ADMIN', 'SYSTEM_ADMIN', 'FINANCE_MANAGER'].includes(u.role || '')) return false;
   return true;
 }
@@ -559,6 +570,14 @@ const selectedMissingMember = computed(() => {
     group: row.group || '',
     groupName: displayGroupName(row.group)
   };
+});
+
+/** Ticket sets of the selected staff user's document (passed to the review pane). */
+const selectedStaffAudience = computed(() => {
+  if (!adminMode.value) return '';
+  const uid = String(s_selectedMemberKey.value || '').split('::')[1] || '';
+  const user = roster.value.find((u) => String(u.id ?? u._id) === uid);
+  return user ? staffAudienceOf(user) : staffKind.value;
 });
 
 async function onComposeReportSaved({ id }) {

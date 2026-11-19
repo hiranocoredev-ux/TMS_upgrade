@@ -1,4 +1,4 @@
-import { normalizeRole, ROLES, canViewAllFinance } from '../constants/roles.js';
+import { normalizeRole, ROLES, canViewAllFinance, hasFinanceManagerRole } from '../constants/roles.js';
 
 const META_GROUPS = ['SUPER_ADMIN', 'ADMIN'];
 
@@ -17,7 +17,8 @@ export function isGlobalFinanceViewerUser(user) {
 export function isFinanceManagerUser(user) {
   if (!user) return false;
   const r = normalizeRole(user.role, user.degree);
-  return r === ROLES.SUPER_ADMIN || r === ROLES.GROUP_BOSS || r === ROLES.FINANCE_MANAGER;
+  // hasFinanceManagerRole: also an Admin who holds the finance manager role.
+  return r === ROLES.SUPER_ADMIN || r === ROLES.GROUP_BOSS || hasFinanceManagerRole(user);
 }
 
 /** Params for GET /admin/users when building finance member pickers. */

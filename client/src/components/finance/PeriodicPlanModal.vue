@@ -67,7 +67,7 @@ import { ref, onMounted, computed, watch, nextTick } from 'vue';
 import { useFinance } from '../../composables/useFinance';
 import { fetchUsers } from '../../services/users';
 import { useAuthStore } from '../../composables/useAuth';
-import { canManageAllFinance, isSystemAdminRole } from '../../constants/roles';
+import { canManageAllFinanceUser, isReadOnlyFinanceAdmin } from '../../constants/roles';
 import { excludeSuperAdmin } from '../../utils/userFilters';
 import { formatDate } from '../../utils/financeHelpers';
 import ReportRichEditor from '../reports/ReportRichEditor.vue';
@@ -187,9 +187,9 @@ const save = async () => {
 
 const authStore = useAuthStore();
 /** Super admin or finance manager: may plan for every team. */
-const isSuperAdmin = computed(() => canManageAllFinance(authStore.user?.role, authStore.user?.degree));
+const isSuperAdmin = computed(() => canManageAllFinanceUser(authStore.user));
 /** Admin (SYSTEM_ADMIN): finance read-only, so the modal never saves. */
-const isReadOnlyAdmin = computed(() => isSystemAdminRole(authStore.user?.role, authStore.user?.degree));
+const isReadOnlyAdmin = computed(() => isReadOnlyFinanceAdmin(authStore.user));
 
 /**
  * Users the viewer may plan for: super admin / finance manager -> every user,

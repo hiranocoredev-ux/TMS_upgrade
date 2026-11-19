@@ -13,7 +13,7 @@ import {
   isOwner,
   getPermissions 
 } from '../permissions.js';
-import { isFullAdminRole, isSystemAdminRole } from '../../constants/roles.js';
+import { isFullAdminRole, isSystemAdminRole, isReadOnlyFinanceAdmin } from '../../constants/roles.js';
 import { hasAdminPrivileges } from '../roleMapper.js';
 import dotenv from 'dotenv';
 
@@ -482,7 +482,7 @@ export const interviewPermissions = {
  * FinanceTransaction Permission Helpers
  * SYSTEM_ADMIN ("Admin") may view finance but never change it.
  */
-const isFinanceReadOnly = (user) => !!user && isSystemAdminRole(user.role, user.degree);
+const isFinanceReadOnly = (user) => isReadOnlyFinanceAdmin(user);
 
 export const financeTransactionPermissions = {
   canView: (user, transaction) => {

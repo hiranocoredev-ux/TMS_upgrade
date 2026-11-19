@@ -60,6 +60,15 @@
             <span class="role-badge" :class="`role-${user.role.toLowerCase()}`">
               {{ formatRole(user.role) }}
             </span>
+            <span
+              v-for="extra in (user.additionalRoles || [])"
+              :key="extra"
+              class="role-badge role-badge--extra"
+              :class="`role-${extra.toLowerCase()}`"
+              :title="`Also ${formatRole(extra)}`"
+            >
+              + {{ formatRole(extra) }}
+            </span>
             </td>
             <td>
               <span class="status-badge" :class="`status-${user.status}`">
@@ -146,7 +155,14 @@
                 </small>
                 <small v-if="form.role === 'SYSTEM_ADMIN'" class="form-hint">
                   Everything a Super Admin can do outside Finance (except Database Management);
-                  Finance is read-only for every team. No group.
+                  Finance is read-only for every team{{ form.alsoFinanceManager ? ', except that this user is also a Finance Manager' : '' }}. No group.
+                </small>
+                <label v-if="isSuperAdmin && form.role === 'SYSTEM_ADMIN'" class="extra-role-check">
+                  <input v-model="form.alsoFinanceManager" type="checkbox" />
+                  <span>Also Finance Manager</span>
+                </label>
+                <small v-if="isSuperAdmin && form.role === 'SYSTEM_ADMIN' && form.alsoFinanceManager" class="form-hint">
+                  Holds both roles at once: full Finance control and the finance manager plans, together with Admin.
                 </small>
               </div>
               <div v-if="!isFormSuperAdmin" class="form-group">
@@ -541,7 +557,8 @@ const form = ref({
   status: 'active',
   paymentRequestApprover: false,
   workingRole: '',
-  hubstaff_id: ''
+  hubstaff_id: '',
+  alsoFinanceManager: false
 });
 
 /** One role per member; clicking the active chip clears it. */
@@ -599,7 +616,8 @@ const openCreateModal = () => {
     status: 'active',
     paymentRequestApprover: false,
     workingRole: '',
-    hubstaff_id: ''
+    hubstaff_id: '',
+    alsoFinanceManager: false
   };
   tempPassword.value = '';
   createTempPasswordCopied.value = false;
@@ -616,7 +634,8 @@ const openEditModal = (user) => {
     status: user.status,
     paymentRequestApprover: !!user.paymentRequestApprover,
     workingRole: user.workingRole || '',
-    hubstaff_id: user.hubstaff_id ?? ''
+    hubstaff_id: user.hubstaff_id ?? '',
+    alsoFinanceManager: (user.additionalRoles || []).includes(ROLES.FINANCE_MANAGER)
   };
   tempPassword.value = '';
   createTempPasswordCopied.value = false;
@@ -644,6 +663,9 @@ const handleSubmit = async () => {
     };
     if (isSuperAdmin.value) {
       basePayload.paymentRequestApprover = !!form.value.paymentRequestApprover;
+      // Only an Admin may also be a finance manager; any other role clears it.
+      basePayload.additionalRoles =
+        form.value.role === ROLES.SYSTEM_ADMIN && form.value.alsoFinanceManager ? [ROLES.FINANCE_MANAGER] : [];
     }
     const roleScopedPayload = isFormSuperAdmin.value
       ? basePayload
@@ -1672,5 +1694,17 @@ const deleteGroup = async (group) => {
       calc(100% - 13px) calc(50% - 2px),
       calc(100% - 8px) calc(50% - 2px);
   }
+}
+
+.extra-role-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.role-badge--extra {
+  margin-left: 4px;
 }
 </style>

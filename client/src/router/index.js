@@ -7,6 +7,7 @@ import {
   normalizeRole,
   isFinanceManagerRole,
   isFullAdminRole,
+  hasFinanceManagerRole,
   FINANCE_MANAGER_ROUTE_NAMES,
 } from '../constants/roles.js';
 
@@ -937,7 +938,10 @@ router.beforeEach((to, from, next) => {
       return;
     }
     const role = normalizeRole(user.role, user.degree);
-    if (role === ROLES.SYSTEM_ADMIN && to.meta.deniedForSystemAdmin) {
+    // An Admin who also holds the finance manager role may open finance manager routes.
+    const passesAsFinanceManager =
+      hasFinanceManagerRole(user) && requiredRoles.includes(ROLES.FINANCE_MANAGER);
+    if (role === ROLES.SYSTEM_ADMIN && to.meta.deniedForSystemAdmin && !passesAsFinanceManager) {
       next('/forbidden');
       return;
     }

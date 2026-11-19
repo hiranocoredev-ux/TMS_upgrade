@@ -11,7 +11,7 @@
  * review and is treated as approved.
  * The server enforces all of this; the client only decides which buttons to show.
  */
-import { normalizeRole, ROLES } from '../constants/roles';
+import { normalizeRole, ROLES, canManageAllFinanceUser } from '../constants/roles';
 
 export const REVIEW = Object.freeze({
   AWAITING_FM: 'awaiting_fm',
@@ -28,8 +28,8 @@ export const reviewStageOf = (tx) => {
 export const isLocked = (tx) => reviewStageOf(tx) === REVIEW.APPROVED;
 
 const roleOf = (user) => normalizeRole(user?.role, user?.degree);
-/** Reviewers: a finance manager or a super admin (the admin role never reviews). */
-export const isReviewer = (user) => [ROLES.FINANCE_MANAGER, ROLES.SUPER_ADMIN].includes(roleOf(user));
+/** Reviewers: a super admin or anyone holding the finance manager role (a plain Admin never reviews). */
+export const isReviewer = (user) => canManageAllFinanceUser(user);
 
 /** A group boss's submission is frozen while it waits for approval. */
 export const isFrozenSubmission = (tx) =>

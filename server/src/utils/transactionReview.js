@@ -12,7 +12,7 @@
  * `fm_approved` is left over from the former two-step review (finance manager,
  * then super admin); with either approval now final, it is treated as `approved`.
  */
-import { normalizeRole, ROLES } from '../constants/roles.js';
+import { normalizeRole, ROLES, canManageAllFinanceUser } from '../constants/roles.js';
 
 export const REVIEW = Object.freeze({
   AWAITING_FM: 'awaiting_fm',
@@ -34,8 +34,8 @@ export const reviewStageOf = (tx) => {
 export const isLocked = (tx) => reviewStageOf(tx) === REVIEW.APPROVED;
 
 const roleOf = (user) => normalizeRole(user?.role, user?.degree);
-/** Reviewers: a finance manager or a super admin (the admin role never reviews). */
-export const isReviewer = (user) => [ROLES.FINANCE_MANAGER, ROLES.SUPER_ADMIN].includes(roleOf(user));
+/** Reviewers: a super admin or anyone holding the finance manager role (a plain Admin never reviews). */
+export const isReviewer = (user) => canManageAllFinanceUser(user);
 
 /** A group boss's submission is frozen while it waits for approval. */
 export const isFrozenSubmission = (tx) =>

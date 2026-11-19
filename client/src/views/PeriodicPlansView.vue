@@ -153,7 +153,7 @@ import PeriodicPlanModal from '../components/finance/PeriodicPlanModal.vue';
 import { fetchPeriodicPlanMatrix, getPeriodicPlan } from '../services/finance';
 import { getESTMonthKey } from '../utils/timezoneHelpers';
 import { useAuthStore } from '../composables/useAuth';
-import { isSystemAdminRole } from '../constants/roles';
+import { isReadOnlyFinanceAdmin } from '../constants/roles';
 
 const ACCENTS = ['#2563eb', '#ea580c', '#059669', '#7c3aed', '#db2777', '#0891b2'];
 
@@ -168,7 +168,7 @@ const monthlyGoals = ref([]);
 const canEdit = ref(false);
 const authStore = useAuthStore();
 /** Admin (SYSTEM_ADMIN): finance read-only, may still open the weeks page to view. */
-const isReadOnlyAdmin = computed(() => isSystemAdminRole(authStore.user?.role, authStore.user?.degree));
+const isReadOnlyAdmin = computed(() => isReadOnlyFinanceAdmin(authStore.user));
 /** null = every team, a code = that team only, '' = nothing. */
 const editableGroup = ref(null);
 const loading = ref(false);

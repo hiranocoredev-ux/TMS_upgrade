@@ -174,12 +174,23 @@ export const getAllReports = async (req, res) => {
 
     try {
         const effective = normalizeRole(req.user?.role, req.user?.degree);
-        // Finance managers see the finance managers' own documents (as admins see each other's).
-        const base = isFullAdminRole(effective)
-            ? {}
-            : effective === ROLES.FINANCE_MANAGER
-                ? { group: FINANCE_DOCUMENT_GROUP }
-                : { group };
+        // Finance managers see the finance managers' own documents (as admins see
+        // each other's), including those of Admins who are also finance managers
+        // (their one plan is filed under ADMIN).
+        let base;
+        if (isFullAdminRole(effective)) {
+            base = {};
+        } else if (effective === ROLES.FINANCE_MANAGER) {
+            const combined = await User.find({ role: ROLES.SYSTEM_ADMIN, additionalRoles: ROLES.FINANCE_MANAGER })
+                .select('_id')
+                .lean();
+            const ids = combined.flatMap((u) => [u._id, String(u._id)]);
+            base = ids.length
+                ? { $and: [{ $or: [{ group: FINANCE_DOCUMENT_GROUP }, { group: ADMIN_DOCUMENT_GROUP, userId: { $in: ids } }] }] }
+                : { group: FINANCE_DOCUMENT_GROUP };
+        } else {
+            base = { group };
+        }
 
         const reports = await Model.find(listFilterForKind(kind, base)).sort({ date: -1 });
         res.status(200).json(reports);

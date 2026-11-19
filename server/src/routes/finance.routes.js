@@ -38,7 +38,7 @@ import {
   isGlobalFinanceViewer,
   FINANCE_META_GROUPS,
 } from "../utils/financeTeamScope.js";
-import { isSuperAdminRole, canManageAllFinance, isSystemAdminRole, isNonMemberRole } from "../constants/roles.js";
+import { isSuperAdminRole, canManageAllFinanceUser, isReadOnlyFinanceAdmin, isNonMemberRole } from "../constants/roles.js";
 import {
   REVIEW,
   reviewStageOf,
@@ -446,7 +446,7 @@ router.post(
       let targetUserId = req.user._id;
       if (validatedData.userId) {
         const canSetOtherUser =
-          hasAdminPrivileges(req.user) || canManageAllFinance(req.user.role, req.user.degree);
+          hasAdminPrivileges(req.user) || canManageAllFinanceUser(req.user);
         if (!canSetOtherUser) {
           return res
             .status(403)
@@ -975,7 +975,7 @@ router.delete(
       // Cannot delete approved transactions (unless boss/admin/finance manager)
       if (transaction.approvalStatus === "approved") {
         if (
-          !canManageAllFinance(req.user.role, req.user.degree) &&
+          !canManageAllFinanceUser(req.user) &&
           !hasAdminPrivileges(req.user)
         ) {
           return res
@@ -1784,7 +1784,7 @@ router.put("/goals", async (req, res, next) => {
     const { month } = req.query;
     const user = req.user;
 
-    if (isSystemAdminRole(user.role, user.degree)) {
+    if (isReadOnlyFinanceAdmin(user)) {
       return res
         .status(403)
         .json(createErrorResponse("INSUFFICIENT_PERMISSIONS", "Finance is read-only for the Admin role", 403));
@@ -2291,8 +2291,8 @@ const overviewMembers = async (user, groupCode) => {
  *   editableGroup "<code>"   → that team only (its group boss)
  */
 const planEditScope = (user) => {
-  // Admin sees every team's plans but finance is read-only for them.
-  if (isSystemAdminRole(user?.role, user?.degree)) return { canEdit: false, editableGroup: null };
+  // Admin sees every team's plans but finance is read-only for them (unless also a finance manager).
+  if (isReadOnlyFinanceAdmin(user)) return { canEdit: false, editableGroup: null };
   if (isGlobalFinanceViewer(user)) return { canEdit: true, editableGroup: null };
   const role = normalizeRole(user?.role, user?.degree);
   if (role === ROLES.GROUP_BOSS && user?.group) {
@@ -3007,7 +3007,7 @@ const updatePeriodicPlanSchema = z.object({
  * reach here (requireFinanceManager).
  */
 const canManageWeekPlanFor = (reqUser, targetGroup) => {
-  if (canManageAllFinance(reqUser.role, reqUser.degree)) return true;
+  if (canManageAllFinanceUser(reqUser)) return true;
   const reqGroup = reqUser.group;
   if (reqGroup && FINANCE_META_GROUPS.has(reqGroup)) return true;
   return !!reqGroup && targetGroup === reqGroup;

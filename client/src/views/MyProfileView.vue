@@ -7,7 +7,7 @@
           <h2>My Profile</h2>
           <p>Manage your account details and security settings.</p>
           <div class="meta-chips">
-            <span class="meta-chip">{{ formatRole(profile.role) }}</span>
+            <span class="meta-chip">{{ rolesLabel }}</span>
             <span class="meta-chip">{{ profile.group || 'No Group' }}</span>
           </div>
         </div>
@@ -29,7 +29,7 @@
         </div>
         <div class="info-item">
           <label>Role</label>
-          <span class="info-value">{{ formatRole(profile.role) }}</span>
+          <span class="info-value">{{ rolesLabel }}</span>
         </div>
         <div class="info-item">
           <label>Group</label>
@@ -440,6 +440,15 @@ const runTest = async (channel) => {
     testingChannel.value = '';
   }
 };
+
+/** "Admin + Finance Manager" when the user holds more than one role. */
+const rolesLabel = computed(() => {
+  const p = profile.value || {};
+  return [p.role, ...(Array.isArray(p.additionalRoles) ? p.additionalRoles : [])]
+    .filter(Boolean)
+    .map((r) => formatRole(r))
+    .join(' + ') || '-';
+});
 
 const formatRole = (role) =>
   role === 'SYSTEM_ADMIN' ? 'Admin' : role ? role.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase()) : '-';

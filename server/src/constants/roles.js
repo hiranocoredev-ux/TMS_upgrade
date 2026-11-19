@@ -134,3 +134,46 @@ export const canOverrideOwnership = (role, degree) =>
 /** Can view team-level summaries (not necessarily unmasked PII) */
 export const canViewTeamData = (role, degree) =>
   GROUP_LEADER_ROLES.includes(normalizeRole(role, degree));
+
+/* ── More than one role per user ──────────────────────────────────────────
+ * A user has one main `role` and may hold extra roles in `additionalRoles`.
+ * Only one combination exists: an Admin (SYSTEM_ADMIN) who is also a finance
+ * manager. Such a user has both roles' permissions at once. Checks that GRANT
+ * a finance manager's powers use the *User helpers below; checks that LIMIT a
+ * pure finance manager (pages, menus) keep using the main role only.
+ */
+export const ADDITIONAL_ROLES_BY_MAIN_ROLE = Object.freeze({
+  [ROLES.SYSTEM_ADMIN]: [ROLES.FINANCE_MANAGER],
+});
+
+/** The extra roles a user with this main role may hold. */
+export const allowedAdditionalRoles = (mainRole, degree) =>
+  ADDITIONAL_ROLES_BY_MAIN_ROLE[normalizeRole(mainRole, degree)] || [];
+
+/** Clean a requested list of extra roles for a main role (drops anything not allowed). */
+export const sanitizeAdditionalRoles = (mainRole, requested) => {
+  const allowed = allowedAdditionalRoles(mainRole);
+  const main = normalizeRole(mainRole);
+  const list = Array.isArray(requested) ? requested : [];
+  return [...new Set(list.map((r) => normalizeRole(r)).filter((r) => r !== main && allowed.includes(r)))];
+};
+
+/** Every role a user holds: the main role first, then any allowed extra roles. */
+export const rolesOfUser = (user) => {
+  if (!user) return [];
+  const main = normalizeRole(user.role, user.degree);
+  return [main, ...sanitizeAdditionalRoles(main, user.additionalRoles)];
+};
+
+export const userHasRole = (user, role) => rolesOfUser(user).includes(role);
+
+/** Holds the finance manager role (as main role or as an extra role). */
+export const hasFinanceManagerRole = (user) => userHasRole(user, ROLES.FINANCE_MANAGER);
+
+/** Manages finance for every team: super admin, or anyone holding the finance manager role. */
+export const canManageAllFinanceUser = (user) =>
+  rolesOfUser(user).some((r) => r === ROLES.SUPER_ADMIN || r === ROLES.FINANCE_MANAGER);
+
+/** An Admin whose finance is read-only: the Admin role without the finance manager role. */
+export const isReadOnlyFinanceAdmin = (user) =>
+  !!user && isSystemAdminRole(user.role, user.degree) && !hasFinanceManagerRole(user);

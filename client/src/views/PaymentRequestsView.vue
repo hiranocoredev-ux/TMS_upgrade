@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue';
 import { useToast } from 'vue-toastification';
 import { useAuthStore } from '../composables/useAuth';
-import { normalizeRole, ROLES, canManageAllFinance, canViewAllFinance } from '../constants/roles';
+import { normalizeRole, ROLES, canManageAllFinanceUser, canViewAllFinance, isReadOnlyFinanceAdmin } from '../constants/roles';
 import * as financeApi from '../services/finance';
 
 const toast = useToast();
@@ -13,9 +13,9 @@ const isSuperAdmin = computed(() => role.value === ROLES.SUPER_ADMIN);
 const isGroupBoss = computed(() => role.value === ROLES.GROUP_BOSS);
 const isGroupMember = computed(() => role.value === ROLES.GROUP_MEMBER);
 /** Super admin and finance manager handle boss → platform requests, as do flagged approvers. */
-const handlesAllFinance = computed(() => canManageAllFinance(authStore.user?.role, authStore.user?.degree));
-/** Admin (SYSTEM_ADMIN): views every request read-only (platform inbox), never handles or submits. */
-const isReadOnlyAdmin = computed(() => role.value === ROLES.SYSTEM_ADMIN);
+const handlesAllFinance = computed(() => canManageAllFinanceUser(authStore.user));
+/** Admin (SYSTEM_ADMIN) without the finance manager role: views every request read-only, never handles or submits. */
+const isReadOnlyAdmin = computed(() => isReadOnlyFinanceAdmin(authStore.user));
 const viewsAllFinance = computed(() => canViewAllFinance(authStore.user?.role, authStore.user?.degree));
 const canUsePlatformInbox = computed(
   () => viewsAllFinance.value || authStore.user?.paymentRequestApprover === true,

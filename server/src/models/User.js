@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
-import { normalizeRole } from '../constants/roles.js';
+import { normalizeRole, sanitizeAdditionalRoles } from '../constants/roles.js';
 import { WORKING_ROLE_VALUES, workingRoleTabs } from '../constants/profiles.js';
 
 const userSchema = new mongoose.Schema({
@@ -47,6 +47,15 @@ const userSchema = new mongoose.Schema({
     ],
     default: 'GROUP_MEMBER',
     required: true
+  },
+  /**
+   * Extra roles on top of `role`, held at the same time. The only combination
+   * is an Admin (SYSTEM_ADMIN) who is also a FINANCE_MANAGER; set by the super admin.
+   */
+  additionalRoles: {
+    type: [String],
+    enum: ['FINANCE_MANAGER'],
+    default: [],
   },
   // Hubstaff numeric user_id  links this user to Hubstaff API activity/time data
   hubstaff_id: {
@@ -190,6 +199,7 @@ userSchema.methods.toSummary = function() {
     name: this.name,
     group: normalizeRole(this.role, this.degree) === 'SUPER_ADMIN' ? null : this.group,
     role: normalizeRole(this.role, this.degree),
+    additionalRoles: sanitizeAdditionalRoles(normalizeRole(this.role, this.degree), this.additionalRoles),
     paymentRequestApprover: !!this.paymentRequestApprover,
     workingRole: this.workingRole || '',
     workingRoles: Array.isArray(this.workingRoles) ? [...this.workingRoles] : [],

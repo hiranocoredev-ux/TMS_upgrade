@@ -15,7 +15,7 @@ import { hasAdminPrivileges, ROLES, normalizeRole } from '../utils/roleMapper.js
 import { USER_GROUP_VALUES, DEFAULT_USER_GROUP } from '../constants/groups.js';
 import { WORKING_ROLE_VALUES } from '../constants/profiles.js';
 import { userOrderStages, USER_ORDER_CLEANUP } from '../utils/userOrder.js';
-import { NON_MEMBER_ROLES } from '../constants/roles.js';
+import { NON_MEMBER_ROLES, sanitizeAdditionalRoles } from '../constants/roles.js';
 
 const router = express.Router();
 
@@ -173,6 +173,9 @@ const roleField = z.enum([
   'GUEST',
 ]);
 
+/** Extra roles held at the same time; only an Admin may also be a finance manager (super admin sets it). */
+const additionalRolesField = z.array(z.enum(['FINANCE_MANAGER'])).max(1).optional();
+
 // One working role per member (Normal Working / Bittensor / Job Working).
 const workingRoleField = z.enum(['', ...WORKING_ROLE_VALUES]).optional();
 
@@ -181,6 +184,7 @@ const createUserSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100, 'Name too long'),
   group: z.string().min(1).optional(),
   role: roleField.optional(),
+  additionalRoles: additionalRolesField,
   paymentRequestApprover: z.boolean().optional(),
   workingRole: workingRoleField,
   status: z.enum(['active', 'disabled', 'pending']).optional(),
@@ -192,6 +196,7 @@ const updateUserSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters').max(100, 'Name too long').optional(),
   group: z.string().min(1).optional(),
   role: roleField.optional(),
+  additionalRoles: additionalRolesField,
   paymentRequestApprover: z.boolean().optional(),
   workingRole: workingRoleField,
   status: z.enum(['active', 'disabled', 'pending']).optional(),
@@ -259,6 +264,7 @@ router.get('/users', async (req, res, next) => {
         name: user.name,
         group: isProtectedRole(canonicalRole) ? null : user.group,
         role: canonicalRole,
+        additionalRoles: sanitizeAdditionalRoles(canonicalRole, user.additionalRoles),
         paymentRequestApprover: !!user.paymentRequestApprover,
         workingRole: user.workingRole || '',
         workingRoles: Array.isArray(user.workingRoles) ? user.workingRoles : [],
@@ -296,6 +302,16 @@ router.post('/users', async (req, res, next) => {
       return res.status(403).json(createErrorResponse(
         'INSUFFICIENT_PERMISSIONS',
         'Only SUPER_ADMIN can create Super Admin, Admin or Finance Manager users',
+        403
+      ));
+    }
+
+    // Extra roles (Admin + finance manager): super admin only.
+    const requestedExtra = sanitizeAdditionalRoles(canonicalRole, validatedData.additionalRoles);
+    if (requestedExtra.length && !isRequesterSuperAdmin(req)) {
+      return res.status(403).json(createErrorResponse(
+        'INSUFFICIENT_PERMISSIONS',
+        'Only SUPER_ADMIN can give a user more than one role',
         403
       ));
     }
@@ -342,6 +358,7 @@ router.post('/users', async (req, res, next) => {
         ? null
         : (validatedData.group || DEFAULT_USER_GROUP),
       role: canonicalRole,
+      additionalRoles: requestedExtra,
       paymentRequestApprover:
         normalizeRole(req.user.role, req.user.degree) === ROLES.SUPER_ADMIN &&
         validatedData.paymentRequestApprover === true,
@@ -360,6 +377,7 @@ router.post('/users', async (req, res, next) => {
         name: user.name,
         group: user.group,
         role: user.role,
+        additionalRoles: user.additionalRoles || [],
         workingRole: user.workingRole || '',
         status: user.status
       }
@@ -478,6 +496,20 @@ router.put('/users/:id', async (req, res, next) => {
       user.role = nextRole;
       // Drop legacy degree once role is explicitly managed.
       user.degree = undefined;
+    }
+    // Extra roles: only the super admin changes them; they are dropped when the
+    // main role no longer allows them (e.g. an Admin becomes a group boss).
+    if (validatedData.additionalRoles !== undefined) {
+      if (!isRequesterSuperAdmin(req)) {
+        return res.status(403).json(createErrorResponse(
+          'INSUFFICIENT_PERMISSIONS',
+          'Only SUPER_ADMIN can give a user more than one role',
+          403
+        ));
+      }
+      user.additionalRoles = sanitizeAdditionalRoles(nextRole, validatedData.additionalRoles);
+    } else {
+      user.additionalRoles = sanitizeAdditionalRoles(nextRole, user.additionalRoles);
     }
     if (isProtectedRole(nextRole)) {
       user.group = null;

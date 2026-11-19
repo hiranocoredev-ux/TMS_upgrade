@@ -116,7 +116,7 @@ const props = defineProps({
   previousPlanDoc: { type: Object, default: null },
   userId: { type: String, default: '' },
   editable: { type: Boolean, default: true },
-  /** 'admin' / 'finance': an admin's or finance manager's own plan (their tickets, no finance target). */
+  /** 'admin' / 'finance' / 'admin+finance': a staff member's own plan (their tickets, no finance target). */
   audience: { type: String, default: 'member' }
 });
 
@@ -267,8 +267,22 @@ async function loadTemplatesAndMerge() {
   loading.value = true;
   loadError.value = '';
   try {
-    const res = await getPlanTicketTemplates(props.period, props.audience);
-    const templates = res.data?.data || res.data || [];
+    // 'admin+finance' (an Admin who is also a finance manager): both ticket sets, admin tickets first.
+    const audiences = String(props.audience || 'member').split('+');
+    const responses = await Promise.all(audiences.map((a) => getPlanTicketTemplates(props.period, a)));
+    // Keep each set together (set order first, then each ticket's own order) and
+    // show a title only once when both sets have it (e.g. "Studying self").
+    const seenTitles = new Set();
+    const templates = responses
+      .flatMap((res, setIndex) =>
+        (res.data?.data || res.data || []).map((t) => ({ ...t, sortOrder: setIndex * 1000 + (Number(t.sortOrder) || 0) }))
+      )
+      .filter((t) => {
+        const key = normalizeTicketTitle(String(t.title || ''));
+        if (seenTitles.has(key)) return false;
+        seenTitles.add(key);
+        return true;
+      });
     allTemplates.value = templates;
     tickets.value = ensureDragIds(
       withoutFinanceTicket(

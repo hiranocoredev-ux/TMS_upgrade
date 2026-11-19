@@ -156,6 +156,47 @@ export const hasRole = (user, role) => {
 
 export const hasAnyRole = (user, roles) => {
   if (!user) return false;
-  const userNorm = normalizeRole(user.role, user.degree);
-  return roles.some((r) => normalizeRole(r) === userNorm);
+  // Every role the user holds, including extra roles (Admin + finance manager).
+  const held = rolesOfUser(user);
+  return roles.some((r) => held.includes(normalizeRole(r)));
 };
+
+/* ── More than one role per user ──────────────────────────────────────────
+ * A user has one main `role` and may hold extra roles in `additionalRoles`.
+ * Only an Admin (SYSTEM_ADMIN) may also be a finance manager, and then has
+ * both roles' permissions at once. Checks that GRANT finance manager powers
+ * use the helpers below; checks that LIMIT a pure finance manager (pages,
+ * menus) keep using the main role.
+ */
+export const ADDITIONAL_ROLES_BY_MAIN_ROLE = Object.freeze({
+  [ROLES.SYSTEM_ADMIN]: [ROLES.FINANCE_MANAGER],
+});
+
+export const allowedAdditionalRoles = (mainRole, degree) =>
+  ADDITIONAL_ROLES_BY_MAIN_ROLE[normalizeRole(mainRole, degree)] || [];
+
+/** Every role a user holds: the main role first, then allowed extra roles. */
+export function rolesOfUser(user) {
+  if (!user) return [];
+  const main = normalizeRole(user.role, user.degree);
+  const allowed = allowedAdditionalRoles(main);
+  const extra = (Array.isArray(user.additionalRoles) ? user.additionalRoles : [])
+    .map((r) => normalizeRole(r))
+    .filter((r) => r !== main && allowed.includes(r));
+  return [main, ...new Set(extra)];
+}
+
+/** Holds the finance manager role (main or extra). */
+export const hasFinanceManagerRole = (user) => rolesOfUser(user).includes(ROLES.FINANCE_MANAGER);
+
+/** Manages finance for every team: super admin, or anyone holding the finance manager role. */
+export const canManageAllFinanceUser = (user) =>
+  rolesOfUser(user).some((r) => r === ROLES.SUPER_ADMIN || r === ROLES.FINANCE_MANAGER);
+
+/** An Admin whose finance is read-only: the Admin role without the finance manager role. */
+export const isReadOnlyFinanceAdmin = (user) =>
+  !!user && normalizeRole(user.role, user.degree) === ROLES.SYSTEM_ADMIN && !hasFinanceManagerRole(user);
+
+/** "Admin + Finance Manager" style label for every role the user holds. */
+export const getUserRolesDisplayName = (user) =>
+  rolesOfUser(user).map((r) => getRoleDisplayName(r)).join(' + ');

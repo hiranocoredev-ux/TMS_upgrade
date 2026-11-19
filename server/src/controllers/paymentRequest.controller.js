@@ -4,7 +4,7 @@ import PaymentRequest, {
   PAYMENT_REQUEST_FLOW,
   PAYMENT_REQUEST_STATUS,
 } from '../models/PaymentRequest.js';
-import { normalizeRole, ROLES, canManageAllFinance } from '../constants/roles.js';
+import { normalizeRole, ROLES, canManageAllFinanceUser, isReadOnlyFinanceAdmin } from '../constants/roles.js';
 import { createErrorResponse, createSuccessResponse } from '../utils/errors.js';
 
 const isSuperAdmin = (u) => normalizeRole(u?.role, u?.degree) === ROLES.SUPER_ADMIN;
@@ -16,9 +16,9 @@ const isGroupBoss = (u) => normalizeRole(u?.role, u?.degree) === ROLES.GROUP_BOS
  */
 export const canHandleBossToPlatformRequests = (u) => {
   if (!u) return false;
-  if (canManageAllFinance(u.role, u.degree)) return true;
-  // Finance is read-only for the admin role, approver flag or not.
-  if (normalizeRole(u.role, u.degree) === ROLES.SYSTEM_ADMIN) return false;
+  if (canManageAllFinanceUser(u)) return true;
+  // Finance is read-only for the admin role (unless also a finance manager), approver flag or not.
+  if (isReadOnlyFinanceAdmin(u)) return false;
   return u.paymentRequestApprover === true;
 };
 
