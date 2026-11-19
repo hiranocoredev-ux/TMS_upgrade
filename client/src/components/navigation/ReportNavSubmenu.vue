@@ -20,19 +20,13 @@
             >
               <span>All teams</span>
             </router-link>
+            <!-- Admins and finance managers together; finance managers may open it too. -->
             <router-link
-              v-if="isAdmin"
+              v-if="isAdmin || isFinanceManager"
               :to="{ name: period.plans.admins }"
               class="nav-item nav-subitem nav-subitem-compact"
             >
               <span>All admins</span>
-            </router-link>
-            <router-link
-              v-if="isSuperAdmin || isFinanceManager"
-              :to="{ name: period.plans.finance }"
-              class="nav-item nav-subitem nav-subitem-compact"
-            >
-              <span>All finance managers</span>
             </router-link>
             <template v-if="isSystemAdmin">
               <router-link
@@ -89,18 +83,11 @@
               <span>All teams</span>
             </router-link>
             <router-link
-              v-if="isAdmin"
+              v-if="isAdmin || isFinanceManager"
               :to="{ name: period.reports.admins }"
               class="nav-item nav-subitem nav-subitem-compact"
             >
               <span>All admins</span>
-            </router-link>
-            <router-link
-              v-if="isSuperAdmin || isFinanceManager"
-              :to="{ name: period.reports.finance }"
-              class="nav-item nav-subitem nav-subitem-compact"
-            >
-              <span>All finance managers</span>
             </router-link>
             <template v-if="isSystemAdmin">
               <router-link
@@ -152,9 +139,8 @@ defineProps({
   isAdmin: { type: Boolean, default: false },
   /** The Admin role (not the super admin): also files their own plans and reports. */
   isSystemAdmin: { type: Boolean, default: false },
-  /** Super admin: also reviews the finance managers' plans and reports. */
   isSuperAdmin: { type: Boolean, default: false },
-  /** Finance manager: files their own plans and reports. */
+  /** Holds the finance manager role: files their own plans and reports, reads "All admins". */
   isFinanceManager: { type: Boolean, default: false },
   isBoss: { type: Boolean, default: false }
 });
@@ -168,13 +154,12 @@ const REPORT_NAV_PERIODS = [
     plans: {
       all: 'allPlans',
       admins: 'allAdminPlans',
-      finance: 'allFinanceManagerPlans',
       templates: 'planTicketTemplatesDaily',
       submit: 'dailyplan',
       history: 'planHistory',
       group: 'groupPlanHistory'
     },
-    reports: { all: 'all', admins: 'allAdmins', finance: 'allFinanceManagers', submit: 'dailyreport', history: 'reportHistory', group: 'groupReportHistory' }
+    reports: { all: 'all', admins: 'allAdmins', submit: 'dailyreport', history: 'reportHistory', group: 'groupReportHistory' }
   },
   {
     key: 'weekly',
@@ -182,7 +167,6 @@ const REPORT_NAV_PERIODS = [
     plans: {
       all: 'allPlansWeekly',
       admins: 'allAdminPlansWeekly',
-      finance: 'allFinanceManagerPlansWeekly',
       templates: 'planTicketTemplatesWeekly',
       submit: 'weeklyplan',
       history: 'weeklyPlanHistory',
@@ -191,7 +175,6 @@ const REPORT_NAV_PERIODS = [
     reports: {
       all: 'allWeekly',
       admins: 'allAdminsWeekly',
-      finance: 'allFinanceManagersWeekly',
       submit: 'weeklyreport',
       history: 'weeklyReportHistory',
       group: 'groupWeeklyReportHistory'
@@ -203,7 +186,6 @@ const REPORT_NAV_PERIODS = [
     plans: {
       all: 'allPlansMonthly',
       admins: 'allAdminPlansMonthly',
-      finance: 'allFinanceManagerPlansMonthly',
       templates: 'planTicketTemplatesMonthly',
       submit: 'monthlyplan',
       history: 'monthlyPlanHistory',
@@ -212,7 +194,6 @@ const REPORT_NAV_PERIODS = [
     reports: {
       all: 'allMonthly',
       admins: 'allAdminsMonthly',
-      finance: 'allFinanceManagersMonthly',
       submit: 'monthlyreport',
       history: 'monthlyReportHistory',
       group: 'groupMonthlyReportHistory'

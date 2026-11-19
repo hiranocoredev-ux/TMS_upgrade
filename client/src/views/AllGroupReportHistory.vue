@@ -175,7 +175,7 @@ const STAFF_ROLE = { admin: ROLES.SYSTEM_ADMIN, finance: ROLES.FINANCE_MANAGER }
 const staffLabels = computed(() =>
   staffKind.value === 'finance'
     ? { note: 'Plans and reports of the finance managers.', person: 'Finance manager', empty: 'No finance managers or no matches for this period / search' }
-    : { note: 'Plans and reports of the Admin role.', person: 'Admin', empty: 'No admins or no matches for this period / search' }
+    : { note: 'Plans and reports of the admins and finance managers.', person: 'Name', empty: 'No admins or finance managers, or no matches for this period / search' }
 );
 const isSuperAdminViewer = computed(
   () => normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SUPER_ADMIN
@@ -183,8 +183,8 @@ const isSuperAdminViewer = computed(
 /** The group a roster user's documents are filed under. */
 function rosterGroupOf(u) {
   if (!adminMode.value) return String(u?.group || '');
-  // An Admin who is also a finance manager files one plan, under ADMIN.
-  return normalizeRole(u?.role, u?.degree) === ROLES.SYSTEM_ADMIN ? 'ADMIN' : STAFF_DOCUMENT_GROUP[staffKind.value];
+  // Admins (also an Admin who is a finance manager) file under ADMIN, finance managers under FINANCE.
+  return normalizeRole(u?.role, u?.degree) === ROLES.SYSTEM_ADMIN ? 'ADMIN' : 'FINANCE';
 }
 
 /** Ticket sets for a staff user's document: both for an Admin who is also a finance manager. */
@@ -192,7 +192,7 @@ function staffAudienceOf(u) {
   if (!adminMode.value) return '';
   const held = rolesOfUser(u);
   if (held.includes(ROLES.SYSTEM_ADMIN) && held.includes(ROLES.FINANCE_MANAGER)) return 'admin+finance';
-  return staffKind.value;
+  return held.includes(ROLES.SYSTEM_ADMIN) ? 'admin' : 'finance';
 }
 const period = computed(() => getReportPeriod(route.meta?.reportPeriod));
 const documentKind = computed(() => getDocumentKindFromRoute(route));
@@ -306,8 +306,13 @@ function pickBestReport(candidates) {
 
 function rosterUsersEligible(u) {
   if (!u || u.status === 'disabled') return false;
-  // Staff pages list everyone holding that role, also as an extra role.
-  if (adminMode.value) return rolesOfUser(u).includes(STAFF_ROLE[staffKind.value]);
+  // "All admins" lists the admins and the finance managers (also as an extra role).
+  if (adminMode.value) {
+    const held = rolesOfUser(u);
+    return staffKind.value === 'finance'
+      ? held.includes(ROLES.FINANCE_MANAGER)
+      : held.includes(ROLES.SYSTEM_ADMIN) || held.includes(ROLES.FINANCE_MANAGER);
+  }
   if (['SUPER_ADMIN', 'SYSTEM_ADMIN', 'FINANCE_MANAGER'].includes(u.role || '')) return false;
   return true;
 }

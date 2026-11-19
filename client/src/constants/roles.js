@@ -123,12 +123,12 @@ export const FINANCE_MANAGER_ROUTE_NAMES = new Set([
   'planHistory',
   'weeklyPlanHistory',
   'monthlyPlanHistory',
-  'allFinanceManagers',
-  'allFinanceManagersWeekly',
-  'allFinanceManagersMonthly',
-  'allFinanceManagerPlans',
-  'allFinanceManagerPlansWeekly',
-  'allFinanceManagerPlansMonthly',
+  'allAdmins',
+  'allAdminsWeekly',
+  'allAdminsMonthly',
+  'allAdminPlans',
+  'allAdminPlansWeekly',
+  'allAdminPlansMonthly',
 ]);
 
 export const getRoleDisplayName = (role, degree) => {
