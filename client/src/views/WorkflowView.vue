@@ -392,7 +392,13 @@
     <!-- ── ADD TIME Modal ─────────────────────────────── -->
     <teleport to="body">
       <div v-if="showModal" class="modal-overlay" @click.self="closeModal">
-        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div
+          class="modal modal--add-time"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-title"
+          @paste="onModalPaste"
+        >
           <div class="modal-header">
             <h3 id="modal-title" class="modal-title">Add Time</h3>
             <button class="modal-close" @click="closeModal" aria-label="Close">✕</button>
@@ -403,6 +409,8 @@
               You can add time for members of your own group. It goes to a super admin or admin
               for approval and shows on the chart only after it is approved.
             </p>
+            <div class="addtime-grid">
+            <div class="addtime-col">
             <!-- Member select -->
             <div class="form-group">
               <label class="form-label">Members</label>
@@ -450,53 +458,67 @@
               <label class="form-label">Date</label>
               <TmsNativeCalendarField v-model="modalForm.date" type="date" class="form-input" />
             </div>
+            </div>
+            <div class="addtime-col addtime-col--entries">
 
             <!-- Time entries: start / end on the chosen day; the time is calculated -->
             <div class="form-group">
               <label class="form-label">Time entries</label>
               <div class="entry-list">
-                <div v-for="(entry, idx) in modalForm.entries" :key="entry.key" class="entry-row">
-                  <div class="entry-row__head">
-                    <span class="entry-row__num">{{ idx + 1 }}</span>
+                <div class="entry-line entry-line--head" aria-hidden="true">
+                  <span></span><span>Start</span><span>End</span><span>Short reason</span><span>Screenshot</span><span></span>
+                </div>
+                <div
+                  v-for="(entry, idx) in modalForm.entries"
+                  :key="entry.key"
+                  class="entry-line"
+                  :class="{ 'entry-line--active': activeEntryKey === entry.key }"
+                  @focusin="activeEntryKey = entry.key"
+                  @click="activeEntryKey = entry.key"
+                >
+                  <span class="entry-row__num">{{ idx + 1 }}</span>
+                  <input v-model="entry.start" type="time" step="60" class="form-input entry-input" aria-label="Start" />
+                  <input v-model="entry.end" type="time" step="60" class="form-input entry-input" aria-label="End" />
+                  <div class="entry-reason">
+                    <input
+                      v-model="entry.shortReason"
+                      type="text"
+                      maxlength="120"
+                      class="form-input entry-input"
+                      placeholder="e.g. Meeting"
+                      aria-label="Short reason"
+                    />
                     <span v-if="entryInfo(entry).ok" class="entry-row__dur">{{ formatMinutes(entryInfo(entry).minutes) }}</span>
                     <span v-else-if="entry.start && entry.end" class="entry-row__err">{{ entryInfo(entry).message }}</span>
-                    <button
-                      v-if="modalForm.entries.length > 1"
-                      type="button"
-                      class="entry-row__remove"
-                      title="Remove this entry"
-                      @click="removeEntry(idx)"
-                    >✕</button>
                   </div>
-                  <div class="entry-row__times">
-                    <label class="entry-field">
-                      <span>Start</span>
-                      <input v-model="entry.start" type="time" step="60" class="form-input" />
-                    </label>
-                    <label class="entry-field">
-                      <span>End</span>
-                      <input v-model="entry.end" type="time" step="60" class="form-input" />
-                    </label>
+                  <div
+                    class="entry-paste"
+                    :class="{ 'entry-paste--filled': entry.file }"
+                    tabindex="0"
+                    role="button"
+                    :aria-label="entry.file ? 'Screenshot attached. Press Ctrl+V to replace it' : 'Click, then press Ctrl+V to paste a screenshot'"
+                    :title="entry.file ? 'Press Ctrl+V to replace' : 'Copy a screenshot, click here, then press Ctrl+V'"
+                    @paste.stop.prevent="onEntryPaste(entry, $event)"
+                  >
+                    <template v-if="entry.file">
+                      <img :src="entry.previewUrl" alt="Pasted screenshot" class="entry-paste__thumb" />
+                      <button type="button" class="entry-paste__clear" title="Remove screenshot" @click.stop="clearEntryScreenshot(entry)">✕</button>
+                    </template>
+                    <span v-else class="entry-paste__hint">Click, then <kbd>Ctrl</kbd>+<kbd>V</kbd></span>
                   </div>
-                  <input
-                    v-model="entry.shortReason"
-                    type="text"
-                    maxlength="120"
-                    class="form-input"
-                    placeholder="Short reason (shown on graph tooltip), e.g. Meeting"
-                  />
-                  <label class="entry-shot">
-                    <input type="file" accept="image/png,image/jpeg,image/webp" @change="onEntryScreenshot(entry, $event)" />
-                    <span class="entry-shot__btn">{{ entry.file ? 'Change screenshot' : 'Attach screenshot' }}</span>
-                    <span v-if="entry.file" class="entry-shot__name">{{ entry.file.name }}</span>
-                    <button v-if="entry.file" type="button" class="entry-shot__clear" @click.prevent="entry.file = null">Remove</button>
-                  </label>
+                  <button
+                    type="button"
+                    class="entry-row__remove"
+                    :disabled="modalForm.entries.length <= 1"
+                    title="Remove this entry"
+                    @click.stop="removeEntry(idx)"
+                  >✕</button>
                 </div>
               </div>
               <button type="button" class="btn-add-entry" @click="addEntry">＋ Add entry</button>
               <p class="field-hint field-hint--modal">
-                Times are 00:00–24:00 on the chosen date; an end of 00:00 means midnight (24:00).
-                Entries may not overlap. Screenshot: PNG, JPG or WEBP, up to 5 MB (optional).
+                Times are 00:00–24:00 on the chosen date; an end of 00:00 means midnight (24:00). Entries may not overlap.
+                Screenshot (optional): copy it (e.g. Win+Shift+S or Print Screen), click the entry's box and press Ctrl+V — up to 5 MB.
               </p>
             </div>
 
@@ -516,6 +538,8 @@
                 rows="3"
                 placeholder="What was worked on?"
               ></textarea>
+            </div>
+            </div>
             </div>
           </div>
 
@@ -710,7 +734,7 @@ const modalForm = ref({
   userIds: [],
   applyToAll: false,
   date: todayStr(),
-  entries: [{ key: 0, start: '', end: '', shortReason: '', file: null }],
+  entries: [{ key: 0, start: '', end: '', shortReason: '', file: null, previewUrl: '' }],
   description: '',
 });
 const monthTargetsByUser = ref(new Map());
@@ -1546,12 +1570,14 @@ const selectedUsersCountText = computed(() => {
 
 /** Add-time entries: start / end ("HH:MM") on the chosen day; the time is end - start. */
 let entryKeySeq = 0;
-const newTimeEntry = () => ({ key: ++entryKeySeq, start: '', end: '', shortReason: '', file: null });
+const newTimeEntry = () => ({ key: ++entryKeySeq, start: '', end: '', shortReason: '', file: null, previewUrl: '' });
 const addEntry = () => {
   modalForm.value.entries.push(newTimeEntry());
 };
 const removeEntry = (idx) => {
-  if (modalForm.value.entries.length > 1) modalForm.value.entries.splice(idx, 1);
+  if (modalForm.value.entries.length <= 1) return;
+  const [removed] = modalForm.value.entries.splice(idx, 1);
+  if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
 };
 const timeToMinutes = (value) => {
   const m = /^(\d{1,2}):(\d{2})$/.exec(String(value || ''));
@@ -1584,19 +1610,52 @@ const modalEntriesOverlap = computed(() => {
   return ranges.some((r, i) => i > 0 && r.startMin < ranges[i - 1].endMin);
 });
 const SCREENSHOT_MAX_BYTES = 5 * 1024 * 1024;
-const onEntryScreenshot = (entry, event) => {
-  const file = event.target.files?.[0] || null;
-  event.target.value = '';
-  if (!file) return;
+/** The entry a pasted screenshot goes to (the one last clicked / typed in). */
+const activeEntryKey = ref(null);
+const clearEntryScreenshot = (entry) => {
+  if (entry.previewUrl) URL.revokeObjectURL(entry.previewUrl);
+  entry.file = null;
+  entry.previewUrl = '';
+};
+/** First image on the clipboard of a paste event, as a named File. */
+const imageFromPaste = (event) => {
+  const items = Array.from(event.clipboardData?.items || []);
+  const item = items.find((i) => i.kind === 'file' && /^image\//.test(i.type));
+  const blob = item?.getAsFile();
+  if (!blob) return null;
+  const ext = blob.type === 'image/jpeg' ? 'jpg' : blob.type === 'image/webp' ? 'webp' : 'png';
+  return new File([blob], `screenshot-${Date.now()}.${ext}`, { type: blob.type });
+};
+const attachScreenshot = (entry, file) => {
   if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
-    toast.warning('Screenshot must be a PNG, JPG or WEBP image.');
+    toast.warning('The clipboard image must be PNG, JPG or WEBP.');
     return;
   }
   if (file.size > SCREENSHOT_MAX_BYTES) {
     toast.warning('Screenshot must be 5 MB or smaller.');
     return;
   }
+  clearEntryScreenshot(entry);
   entry.file = file;
+  entry.previewUrl = URL.createObjectURL(file);
+  activeEntryKey.value = entry.key;
+};
+const onEntryPaste = (entry, event) => {
+  const file = imageFromPaste(event);
+  if (!file) {
+    toast.info('No image on the clipboard. Copy a screenshot first (e.g. Win+Shift+S), then press Ctrl+V.');
+    return;
+  }
+  attachScreenshot(entry, file);
+};
+/** Ctrl+V anywhere in the dialog: an image goes to the active entry (text pastes are left alone). */
+const onModalPaste = (event) => {
+  const file = imageFromPaste(event);
+  if (!file) return;
+  event.preventDefault();
+  const entries = modalForm.value.entries;
+  const entry = entries.find((e) => e.key === activeEntryKey.value) || entries[entries.length - 1];
+  if (entry) attachScreenshot(entry, file);
 };
 
 watch(chartOrientation, async () => {
@@ -1635,6 +1694,9 @@ const openModal = async () => {
 };
 
 const closeModal = () => {
+  for (const e of modalForm.value.entries || []) {
+    if (e.previewUrl) URL.revokeObjectURL(e.previewUrl);
+  }
   showModal.value = false;
 };
 
@@ -2690,13 +2752,6 @@ onUnmounted(() => {
 .entry-row__remove:hover { background: rgba(220, 38, 38, 0.1); color: #dc2626; }
 .entry-row__times { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .entry-field { display: flex; flex-direction: column; gap: 4px; font-size: .75rem; font-weight: 600; color: var(--wf-muted); }
-.entry-shot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: .8rem; cursor: pointer; }
-.entry-shot input[type='file'] { display: none; }
-.entry-shot__btn {
-  padding: 4px 10px; border: 1px dashed var(--wf-line); border-radius: 8px; color: rgb(37, 99, 235); font-weight: 600;
-}
-.entry-shot__name { color: var(--wf-muted); overflow-wrap: anywhere; }
-.entry-shot__clear { border: none; background: none; color: #dc2626; cursor: pointer; font-size: .78rem; }
 .btn-add-entry {
   margin-top: 8px; align-self: flex-start; padding: 6px 12px; border-radius: 8px;
   border: 1px dashed rgba(59, 130, 246, 0.6); background: transparent; color: rgb(37, 99, 235);
@@ -2715,4 +2770,52 @@ onUnmounted(() => {
   color: rgb(37, 99, 235);
 }
 .btn--hubstaff-org:hover { background: rgba(59, 130, 246, 0.08); }
+
+/* ── Add Time: larger dialog, two columns, one line per entry ── */
+.modal.modal--add-time { max-width: 1080px; }
+.modal--add-time .modal-body { max-height: 78vh; }
+.addtime-grid { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 1.25rem; align-items: start; }
+.addtime-col { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+.modal--add-time .member-picker__list { max-height: 42vh; }
+.entry-line {
+  display: grid;
+  grid-template-columns: 26px 120px 120px minmax(140px, 1fr) 132px 30px;
+  gap: 8px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--wf-line);
+  border-radius: 10px;
+  background: var(--wf-elevated);
+}
+.entry-line--head {
+  padding: 0 8px; border: none; background: none;
+  font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--wf-muted);
+}
+.entry-line--active { border-color: rgba(59, 130, 246, 0.55); box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12); }
+.entry-input { padding: .4rem .5rem; height: 36px; min-width: 0; }
+.entry-reason { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.entry-paste {
+  position: relative; height: 56px; border: 1px dashed rgba(59, 130, 246, 0.55); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden;
+  background: var(--bg-primary); outline: none;
+}
+.entry-paste:focus { border-style: solid; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25); }
+.entry-paste__hint { font-size: .72rem; color: rgb(37, 99, 235); font-weight: 600; text-align: center; padding: 0 4px; }
+.entry-paste__hint kbd {
+  font-family: inherit; font-size: .68rem; padding: 0 4px; border: 1px solid rgba(59, 130, 246, 0.45); border-radius: 4px;
+}
+.entry-paste__thumb { width: 100%; height: 100%; object-fit: cover; }
+.entry-paste__clear {
+  position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; border: none;
+  background: rgba(15, 23, 42, 0.7); color: #fff; font-size: .7rem; cursor: pointer; line-height: 1;
+}
+.entry-row__remove:disabled { opacity: .3; cursor: not-allowed; }
+@media (max-width: 900px) {
+  .addtime-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .entry-line { grid-template-columns: 26px 1fr 1fr 30px; }
+  .entry-line--head { display: none; }
+  .entry-reason, .entry-paste { grid-column: 2 / -1; }
+}
 </style>

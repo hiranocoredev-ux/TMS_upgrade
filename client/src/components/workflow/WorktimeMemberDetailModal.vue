@@ -76,11 +76,23 @@
                     Total <strong>{{ formatDuration(addRange.minutes * 60) }}</strong> ({{ addRange.start }}–{{ addRange.end }})
                   </p>
                   <p v-else-if="addForm.start && addForm.end" class="wmt-add-preview wmt-add-preview--err">{{ addRange.message }}</p>
-                  <label class="wmt-add-field wmt-add-field--full wmt-add-shot">
-                    <span class="wmt-add-label">Screenshot <span class="wmt-optional">optional · PNG, JPG, WEBP · 5 MB</span></span>
-                    <input type="file" accept="image/png,image/jpeg,image/webp" @change="onAddScreenshot" />
-                    <span v-if="addForm.file" class="wmt-add-shot__name">{{ addForm.file.name }}</span>
-                  </label>
+                  <div class="wmt-add-field wmt-add-field--full">
+                    <span class="wmt-add-label">Screenshot <span class="wmt-optional">optional · copy it, click below, Ctrl+V · 5 MB</span></span>
+                    <div
+                      class="wmt-paste"
+                      :class="{ 'wmt-paste--filled': addForm.file }"
+                      tabindex="0"
+                      role="button"
+                      :aria-label="addForm.file ? 'Screenshot attached. Press Ctrl+V to replace it' : 'Click, then press Ctrl+V to paste a screenshot'"
+                      @paste.prevent="onAddPaste"
+                    >
+                      <template v-if="addForm.file">
+                        <img :src="addForm.previewUrl" alt="Pasted screenshot" class="wmt-paste__thumb" />
+                        <button type="button" class="wmt-paste__clear" title="Remove screenshot" @click.stop="clearAddScreenshot">✕</button>
+                      </template>
+                      <span v-else class="wmt-paste__hint">Click here, then press Ctrl+V</span>
+                    </div>
+                  </div>
                   <label class="wmt-add-field wmt-add-field--full">
                     <span class="wmt-add-label">Short reason <span class="wmt-optional">shown on graph tooltip</span></span>
                     <input
@@ -306,6 +318,7 @@ const addForm = ref({
   shortReason: '',
   description: '',
   file: null,
+  previewUrl: '',
 });
 
 const resetAddForm = () => {
@@ -314,7 +327,8 @@ const resetAddForm = () => {
   if (list.length === 1) d = list[0];
   else if (list.length > 1 && (!d || !list.includes(d))) d = list[0];
   else if (!list.length) d = '';
-  addForm.value = { date: d, start: '', end: '', shortReason: '', description: '', file: null };
+  if (addForm.value?.previewUrl) URL.revokeObjectURL(addForm.value.previewUrl);
+  addForm.value = { date: d, start: '', end: '', shortReason: '', description: '', file: null, previewUrl: '' };
 };
 
 /** Start / end of the entry being added; an end of 00:00 means midnight (24:00). */
@@ -335,19 +349,27 @@ const addRange = computed(() => {
     end: endMin === 24 * 60 ? '24:00' : addForm.value.end,
   };
 });
-const onAddScreenshot = (event) => {
-  const file = event.target.files?.[0] || null;
-  if (!file) {
-    addForm.value.file = null;
+const clearAddScreenshot = () => {
+  if (addForm.value.previewUrl) URL.revokeObjectURL(addForm.value.previewUrl);
+  addForm.value.file = null;
+  addForm.value.previewUrl = '';
+};
+/** Ctrl+V on the screenshot box: the first image on the clipboard. */
+const onAddPaste = (event) => {
+  const item = Array.from(event.clipboardData?.items || []).find((i) => i.kind === 'file' && /^image\//.test(i.type));
+  const blob = item?.getAsFile();
+  if (!blob) {
+    toast.info('No image on the clipboard. Copy a screenshot first (e.g. Win+Shift+S), then press Ctrl+V.');
     return;
   }
-  if (!/^image\/(png|jpeg|webp)$/.test(file.type) || file.size > 5 * 1024 * 1024) {
+  if (!/^image\/(png|jpeg|webp)$/.test(blob.type) || blob.size > 5 * 1024 * 1024) {
     toast.warning('Screenshot must be a PNG, JPG or WEBP image of 5 MB or smaller.');
-    event.target.value = '';
-    addForm.value.file = null;
     return;
   }
-  addForm.value.file = file;
+  const ext = blob.type === 'image/jpeg' ? 'jpg' : blob.type === 'image/webp' ? 'webp' : 'png';
+  clearAddScreenshot();
+  addForm.value.file = new File([blob], `screenshot-${Date.now()}.${ext}`, { type: blob.type });
+  addForm.value.previewUrl = URL.createObjectURL(addForm.value.file);
 };
 
 const isDateInsideChartRange = (dateStr) => {
@@ -1108,6 +1130,15 @@ const removeEntry = async (day, adj) => {
 .wmt-adj-link { font-size: 0.78rem; font-weight: 600; color: rgb(37, 99, 235); text-decoration: none; }
 .wmt-adj-link:hover { text-decoration: underline; }
 .wmt-add-preview--err { color: #dc2626; }
-.wmt-add-shot input[type='file'] { font-size: 0.78rem; }
-.wmt-add-shot__name { font-size: 0.75rem; opacity: 0.75; overflow-wrap: anywhere; }
+.wmt-paste {
+  position: relative; height: 72px; border: 1px dashed rgba(59, 130, 246, 0.55); border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; overflow: hidden; outline: none;
+}
+.wmt-paste:focus { border-style: solid; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.25); }
+.wmt-paste__hint { font-size: 0.75rem; font-weight: 600; color: rgb(37, 99, 235); }
+.wmt-paste__thumb { width: 100%; height: 100%; object-fit: cover; }
+.wmt-paste__clear {
+  position: absolute; top: 4px; right: 4px; width: 20px; height: 20px; border-radius: 50%; border: none;
+  background: rgba(15, 23, 42, 0.7); color: #fff; font-size: 0.7rem; cursor: pointer;
+}
 </style>
