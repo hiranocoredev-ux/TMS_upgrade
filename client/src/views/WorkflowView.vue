@@ -411,6 +411,12 @@
             </p>
             <div class="addtime-grid">
             <div class="addtime-col">
+            <!-- Date -->
+            <div class="form-group">
+              <label class="form-label">Date</label>
+              <TmsNativeCalendarField v-model="modalForm.date" type="date" class="form-input" />
+            </div>
+
             <!-- Member select -->
             <div class="form-group">
               <label class="form-label">Members</label>
@@ -453,11 +459,6 @@
               </div>
             </div>
 
-            <!-- Date -->
-            <div class="form-group">
-              <label class="form-label">Date</label>
-              <TmsNativeCalendarField v-model="modalForm.date" type="date" class="form-input" />
-            </div>
             </div>
             <div class="addtime-col addtime-col--entries">
 
@@ -496,12 +497,16 @@
                     :class="{ 'entry-paste--filled': entry.file }"
                     tabindex="0"
                     role="button"
-                    :aria-label="entry.file ? 'Screenshot attached. Press Ctrl+V to replace it' : 'Click, then press Ctrl+V to paste a screenshot'"
-                    :title="entry.file ? 'Press Ctrl+V to replace' : 'Copy a screenshot, click here, then press Ctrl+V'"
+                    :aria-label="entry.file ? 'Screenshot attached. Press Enter to preview it, or Ctrl+V to replace it' : 'Click, then press Ctrl+V to paste a screenshot'"
+                    :title="entry.file ? 'Click to preview · Ctrl+V to replace' : 'Copy a screenshot, click here, then press Ctrl+V'"
                     @paste.stop.prevent="onEntryPaste(entry, $event)"
+                    @click="entry.file && openScreenshotPreview(entry)"
+                    @keydown.enter.prevent="entry.file && openScreenshotPreview(entry)"
+                    @keydown.space.prevent="entry.file && openScreenshotPreview(entry)"
                   >
                     <template v-if="entry.file">
                       <img :src="entry.previewUrl" alt="Pasted screenshot" class="entry-paste__thumb" />
+                      <span class="entry-paste__zoom" aria-hidden="true">🔍 Preview</span>
                       <button type="button" class="entry-paste__clear" title="Remove screenshot" @click.stop="clearEntryScreenshot(entry)">✕</button>
                     </template>
                     <span v-else class="entry-paste__hint">Click, then <kbd>Ctrl</kbd>+<kbd>V</kbd></span>
@@ -515,11 +520,14 @@
                   >✕</button>
                 </div>
               </div>
-              <button type="button" class="btn-add-entry" @click="addEntry">＋ Add entry</button>
-              <p class="field-hint field-hint--modal">
-                Times are 00:00–24:00 on the chosen date; an end of 00:00 means midnight (24:00). Entries may not overlap.
-                Screenshot (optional): copy it (e.g. Win+Shift+S or Print Screen), click the entry's box and press Ctrl+V — up to 5 MB.
-              </p>
+              <button type="button" class="btn-add-entry" @click="addEntry">
+                <span class="btn-add-entry__icon" aria-hidden="true">+</span>
+                Add another entry
+              </button>
+              <ul class="addtime-tips">
+                <li><span class="addtime-tips__icon" aria-hidden="true">🕒</span>Times are 00:00–24:00 on the chosen date. An end of 00:00 means midnight. Entries may not overlap.</li>
+                <li><span class="addtime-tips__icon" aria-hidden="true">📋</span>Screenshot (optional, up to 5 MB): copy it with <kbd>Win</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>, click the entry's box, then press <kbd>Ctrl</kbd>+<kbd>V</kbd>. Click a pasted screenshot to preview it.</li>
+              </ul>
             </div>
 
             <!-- Total preview -->
@@ -548,6 +556,52 @@
             <button class="btn btn--primary" @click="handleAddTime" :disabled="modalLoading">
               {{ modalLoading ? 'Saving…' : 'Submit' }}
             </button>
+          </div>
+
+          <!-- Full-size preview of a pasted screenshot (inside the dialog, so Ctrl+V still replaces it) -->
+          <div
+            v-if="previewEntry"
+            ref="screenshotPreviewRef"
+            class="shot-preview"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Screenshot preview"
+            tabindex="-1"
+            @click.self="closeScreenshotPreview"
+            @keydown.esc.stop.prevent="closeScreenshotPreview"
+          >
+            <div class="shot-preview__panel">
+              <div class="shot-preview__head">
+                <div class="shot-preview__title">
+                  <strong>Screenshot · Entry {{ previewEntryIndex + 1 }}</strong>
+                  <span v-if="entryInfo(previewEntry).ok" class="shot-preview__meta">
+                    {{ previewEntry.start }}–{{ entryInfo(previewEntry).end }} · {{ formatMinutes(entryInfo(previewEntry).minutes) }}
+                  </span>
+                  <span v-if="previewEntry.shortReason" class="shot-preview__meta">{{ previewEntry.shortReason }}</span>
+                </div>
+                <button type="button" class="modal-close" aria-label="Close preview" @click="closeScreenshotPreview">✕</button>
+              </div>
+              <div class="shot-preview__stage">
+                <img
+                  :src="previewEntry.previewUrl"
+                  alt="Pasted screenshot, full size"
+                  class="shot-preview__img"
+                  @load="onPreviewImageLoad"
+                />
+              </div>
+              <div class="shot-preview__foot">
+                <span class="shot-preview__info">
+                  {{ previewEntry.file.name }}
+                  <template v-if="previewDims"> · {{ previewDims }}</template>
+                  · {{ formatFileSize(previewEntry.file.size) }}
+                  · <span class="shot-preview__hint">Press <kbd>Ctrl</kbd>+<kbd>V</kbd> to replace</span>
+                </span>
+                <div class="shot-preview__actions">
+                  <button type="button" class="btn btn--danger-outline btn--sm" @click="removePreviewedScreenshot">Remove</button>
+                  <button type="button" class="btn btn--primary btn--sm" @click="closeScreenshotPreview">Done</button>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1658,6 +1712,43 @@ const onModalPaste = (event) => {
   if (entry) attachScreenshot(entry, file);
 };
 
+/** Full-size preview of one entry's pasted screenshot. */
+const previewEntryKey = ref(null);
+const previewDims = ref('');
+const screenshotPreviewRef = ref(null);
+const previewEntryIndex = computed(() =>
+  (modalForm.value.entries || []).findIndex((e) => e.key === previewEntryKey.value)
+);
+/** The previewed entry while it still has a screenshot (removing it closes the preview). */
+const previewEntry = computed(() => {
+  const entry = modalForm.value.entries?.[previewEntryIndex.value];
+  return entry?.file ? entry : null;
+});
+const openScreenshotPreview = async (entry) => {
+  activeEntryKey.value = entry.key; // Ctrl+V in the preview replaces this entry's screenshot
+  previewEntryKey.value = entry.key;
+  await nextTick();
+  screenshotPreviewRef.value?.focus();
+};
+const closeScreenshotPreview = () => {
+  previewEntryKey.value = null;
+};
+const removePreviewedScreenshot = () => {
+  if (previewEntry.value) clearEntryScreenshot(previewEntry.value);
+  closeScreenshotPreview();
+};
+const onPreviewImageLoad = (event) => {
+  const { naturalWidth: w, naturalHeight: h } = event.target;
+  previewDims.value = w && h ? `${w}×${h}px` : '';
+};
+watch(() => previewEntry.value?.previewUrl, () => { previewDims.value = ''; });
+const formatFileSize = (bytes) => {
+  const n = Number(bytes) || 0;
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+};
+
 watch(chartOrientation, async () => {
   await nextTick();
   buildChart();
@@ -1694,6 +1785,7 @@ const openModal = async () => {
 };
 
 const closeModal = () => {
+  closeScreenshotPreview();
   for (const e of modalForm.value.entries || []) {
     if (e.previewUrl) URL.revokeObjectURL(e.previewUrl);
   }
@@ -2753,11 +2845,30 @@ onUnmounted(() => {
 .entry-row__times { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .entry-field { display: flex; flex-direction: column; gap: 4px; font-size: .75rem; font-weight: 600; color: var(--wf-muted); }
 .btn-add-entry {
-  margin-top: 8px; align-self: flex-start; padding: 6px 12px; border-radius: 8px;
-  border: 1px dashed rgba(59, 130, 246, 0.6); background: transparent; color: rgb(37, 99, 235);
-  font-weight: 600; cursor: pointer;
+  margin-top: 10px; width: 100%; min-height: 42px; padding: 8px 12px; border-radius: 10px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  border: 1.5px dashed rgba(59, 130, 246, 0.45); background: rgba(59, 130, 246, 0.04);
+  color: rgb(37, 99, 235); font-weight: 600; font-size: .85rem; font-family: inherit; cursor: pointer;
+  transition: background .15s, border-color .15s;
 }
-.btn-add-entry:hover { background: rgba(59, 130, 246, 0.08); }
+.btn-add-entry:hover { background: rgba(59, 130, 246, 0.1); border-color: rgba(59, 130, 246, 0.75); border-style: solid; }
+.btn-add-entry:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25); }
+.btn-add-entry__icon {
+  width: 20px; height: 20px; border-radius: 50%; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: rgb(37, 99, 235); color: #fff; font-size: .95rem; font-weight: 700; line-height: 1;
+}
+.addtime-tips {
+  list-style: none; margin: 12px 0 0; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px;
+  border-radius: 10px; background: var(--bg-secondary, rgba(148, 163, 184, 0.08));
+  font-size: .76rem; line-height: 1.45; color: var(--wf-muted);
+}
+.addtime-tips li { display: flex; gap: 8px; align-items: flex-start; }
+.addtime-tips__icon { flex: none; font-size: .8rem; }
+.addtime-tips kbd {
+  font-family: inherit; font-size: .7rem; padding: 0 4px; border: 1px solid var(--wf-line); border-radius: 4px;
+  background: var(--bg-primary);
+}
 .pending-row__range { font-size: .78rem; font-weight: 600; }
 .pending-row__links { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .78rem; margin-top: 2px; }
 .pending-row__links a { color: rgb(37, 99, 235); font-weight: 600; text-decoration: none; }
@@ -2772,11 +2883,14 @@ onUnmounted(() => {
 .btn--hubstaff-org:hover { background: rgba(59, 130, 246, 0.08); }
 
 /* ── Add Time: larger dialog, two columns, one line per entry ── */
-.modal.modal--add-time { max-width: 1080px; }
-.modal--add-time .modal-body { max-height: 78vh; }
-.addtime-grid { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 1.25rem; align-items: start; }
-.addtime-col { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
-.modal--add-time .member-picker__list { max-height: 42vh; }
+.modal.modal--add-time { max-width: 1080px; max-height: calc(100vh - 2rem); position: relative; }
+/* Header and footer always visible; only the body scrolls. */
+.modal--add-time .modal-header, .modal--add-time .modal-footer { flex: none; }
+.modal--add-time .modal-body { flex: 1 1 auto; min-height: 0; max-height: none; }
+.addtime-grid { display: grid; grid-template-columns: minmax(240px, 320px) 1fr; gap: 1.5rem; align-items: start; }
+.addtime-col { display: flex; flex-direction: column; gap: 1.1rem; min-width: 0; }
+.addtime-col--entries { padding-left: 1.5rem; border-left: 1px solid var(--border-light); }
+.modal--add-time .member-picker__list { max-height: min(42vh, 360px); }
 .entry-line {
   display: grid;
   grid-template-columns: 26px 120px 120px minmax(140px, 1fr) 132px 30px;
@@ -2809,9 +2923,49 @@ onUnmounted(() => {
   position: absolute; top: 2px; right: 2px; width: 20px; height: 20px; border-radius: 50%; border: none;
   background: rgba(15, 23, 42, 0.7); color: #fff; font-size: .7rem; cursor: pointer; line-height: 1;
 }
+.entry-paste--filled { cursor: zoom-in; }
+.entry-paste__zoom {
+  position: absolute; inset: auto 0 0 0; padding: 2px 0; text-align: center;
+  font-size: .66rem; font-weight: 700; color: #fff; background: rgba(15, 23, 42, 0.65);
+  opacity: 0; transition: opacity .15s; pointer-events: none;
+}
+.entry-paste--filled:hover .entry-paste__zoom,
+.entry-paste--filled:focus .entry-paste__zoom { opacity: 1; }
+
+/* ── Add Time: full-size screenshot preview ── */
+.shot-preview {
+  position: fixed; inset: 0; z-index: 1100; outline: none;
+  display: flex; align-items: center; justify-content: center; padding: 24px;
+  background: rgba(15, 23, 42, 0.72);
+}
+.shot-preview__panel {
+  display: flex; flex-direction: column; width: min(1200px, 100%); max-height: 100%;
+  border-radius: 12px; overflow: hidden; background: var(--wf-elevated, var(--bg-primary));
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+}
+.shot-preview__head, .shot-preview__foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 10px 14px; border-color: var(--wf-line);
+}
+.shot-preview__head { border-bottom: 1px solid var(--wf-line); }
+.shot-preview__foot { border-top: 1px solid var(--wf-line); }
+.shot-preview__title { display: flex; align-items: baseline; gap: 4px 12px; flex-wrap: wrap; min-width: 0; }
+.shot-preview__meta, .shot-preview__info { font-size: .8rem; color: var(--wf-muted); }
+.shot-preview__info { overflow-wrap: anywhere; }
+.shot-preview__hint kbd {
+  font-family: inherit; font-size: .72rem; padding: 0 4px; border: 1px solid var(--wf-line); border-radius: 4px;
+}
+.shot-preview__actions { display: flex; gap: 8px; margin-left: auto; }
+.shot-preview__stage {
+  flex: 1; min-height: 0; overflow: auto; display: flex; align-items: center; justify-content: center;
+  padding: 12px; background: repeating-conic-gradient(rgba(148, 163, 184, 0.12) 0 25%, transparent 0 50%) 0 0 / 20px 20px;
+}
+.shot-preview__img { max-width: 100%; max-height: calc(100vh - 190px); object-fit: contain; display: block; }
+
 .entry-row__remove:disabled { opacity: .3; cursor: not-allowed; }
 @media (max-width: 900px) {
   .addtime-grid { grid-template-columns: 1fr; }
+  .addtime-col--entries { padding-left: 0; border-left: none; }
 }
 @media (max-width: 640px) {
   .entry-line { grid-template-columns: 26px 1fr 1fr 30px; }
