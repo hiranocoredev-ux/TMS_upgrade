@@ -7,6 +7,14 @@ const manualAdjustmentSubSchema = new mongoose.Schema(
     // Short, tooltip-friendly reason shown on the worktime graph hover.
     shortReason: { type: String, default: '' },
     /**
+     * The period the time was added for, "HH:MM" (00:00–24:00) on the worklog's
+     * day; `seconds` is end - start. Empty on entries made before ranges existed.
+     */
+    startTime: { type: String, default: '' },
+    endTime: { type: String, default: '' },
+    /** Optional proof: a screenshot under /uploads/worktime_screenshots. */
+    screenshotUrl: { type: String, default: '' },
+    /**
      * Only `approved` time counts (add_time, charts, achievement, competition).
      * Time a group boss adds starts `pending` until a super admin / admin
      * approves it; time they add themselves is approved at once. Entries from

@@ -63,33 +63,24 @@
                     </div>
                     <div class="wmt-add-field--split">
                       <label>
-                        <span class="wmt-add-label">Hours</span>
-                        <input
-                          v-model.number="addForm.hours"
-                          type="number"
-                          min="0"
-                          step="1"
-                          class="wmt-input"
-                          placeholder="0"
-                        />
+                        <span class="wmt-add-label">Start</span>
+                        <input v-model="addForm.start" type="time" step="60" class="wmt-input" />
                       </label>
                       <label>
-                        <span class="wmt-add-label">Minutes</span>
-                        <input
-                          v-model.number="addForm.minutes"
-                          type="number"
-                          min="0"
-                          step="1"
-                          class="wmt-input"
-                          placeholder="0"
-                          title="May exceed 59 (e.g. 250 minutes)"
-                        />
+                        <span class="wmt-add-label">End</span>
+                        <input v-model="addForm.end" type="time" step="60" class="wmt-input" title="00:00 means midnight (24:00)" />
                       </label>
                     </div>
                   </div>
-                  <p v-if="addFormTotalMinutes > 0" class="wmt-add-preview">
-                    Total <strong>{{ addFormNormalizedH }}h {{ addFormNormalizedM }}m</strong><span v-if="addFormNeedsNormalizeHint"> ({{ addFormRawH }}h {{ addFormRawM }}m entered)</span>
+                  <p v-if="addRange.ok" class="wmt-add-preview">
+                    Total <strong>{{ formatDuration(addRange.minutes * 60) }}</strong> ({{ addRange.start }}–{{ addRange.end }})
                   </p>
+                  <p v-else-if="addForm.start && addForm.end" class="wmt-add-preview wmt-add-preview--err">{{ addRange.message }}</p>
+                  <label class="wmt-add-field wmt-add-field--full wmt-add-shot">
+                    <span class="wmt-add-label">Screenshot <span class="wmt-optional">optional · PNG, JPG, WEBP · 5 MB</span></span>
+                    <input type="file" accept="image/png,image/jpeg,image/webp" @change="onAddScreenshot" />
+                    <span v-if="addForm.file" class="wmt-add-shot__name">{{ addForm.file.name }}</span>
+                  </label>
                   <label class="wmt-add-field wmt-add-field--full">
                     <span class="wmt-add-label">Short reason <span class="wmt-optional">shown on graph tooltip</span></span>
                     <input
@@ -139,7 +130,16 @@
                   <div v-if="visibleDays.length === 0" class="wmt-empty">No activity in this range.</div>
                   <div v-else class="wmt-days">
                     <section v-for="day in visibleDays" :key="day.date" class="wmt-day">
-                      <div v-if="visibleDays.length > 1" class="wmt-day-label">{{ formatDayTitle(day.date) }}</div>
+                      <div class="wmt-day-head">
+                        <div v-if="visibleDays.length > 1" class="wmt-day-label">{{ formatDayTitle(day.date) }}</div>
+                        <a
+                          v-if="day.adjustments?.length && hubstaffActivityUrl(detail.hubstaffId, day.date)"
+                          class="wmt-adj-link wmt-day-hubstaff"
+                          :href="hubstaffActivityUrl(detail.hubstaffId, day.date)"
+                          target="_blank"
+                          rel="noopener"
+                        >Open in Hubstaff ↗</a>
+                      </div>
 
                       <div v-if="!day.adjustments?.length" class="wmt-no-adj">No manual entries.</div>
                       <ul v-else class="wmt-adj-list">
@@ -191,7 +191,9 @@
                                   :class="['wmt-adj-status', `wmt-adj-status--${adj.status}`]"
                                 >{{ adj.status === 'pending' ? 'Waiting for approval' : 'Rejected' }}</span>
                               </div>
+                              <p v-if="adj.startTime" class="wmt-adj-range">{{ adj.startTime }}–{{ adj.endTime }}</p>
                               <p class="wmt-adj-note">{{ adj.description || '—' }}</p>
+                              <a v-if="adj.screenshotUrl" class="wmt-adj-link" :href="adj.screenshotUrl" target="_blank" rel="noopener">View screenshot</a>
                               <p v-if="adj.addedByName || adj.rejectReason" class="wmt-adj-by">
                                 <span v-if="adj.addedByName">Added by {{ adj.addedByName }}</span>
                                 <span v-if="adj.status === 'rejected' && adj.rejectReason"> · Reason: {{ adj.rejectReason }}</span>
@@ -222,6 +224,7 @@
 import { ref, computed, watch } from 'vue';
 import { getESTDateKey } from '../../utils/timezoneHelpers';
 import { useToast } from 'vue-toastification';
+import { useHubstaffOrg } from '../../composables/useHubstaffOrg';
 import UserAvatar from '../UserAvatar.vue';
 import {
   getWorkflowManualTimeDetail,
@@ -245,6 +248,9 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue', 'saved']);
 
 const toast = useToast();
+/** Links to the member's Hubstaff activity for a day. */
+const { loadHubstaffOrg, hubstaffActivityUrl } = useHubstaffOrg();
+loadHubstaffOrg();
 const loading = ref(false);
 const error = ref('');
 const detail = ref(null);
@@ -295,10 +301,11 @@ const pickDefaultAddDate = () => {
 
 const addForm = ref({
   date: '',
-  hours: null,
-  minutes: null,
+  start: '',
+  end: '',
   shortReason: '',
   description: '',
+  file: null,
 });
 
 const resetAddForm = () => {
@@ -307,31 +314,41 @@ const resetAddForm = () => {
   if (list.length === 1) d = list[0];
   else if (list.length > 1 && (!d || !list.includes(d))) d = list[0];
   else if (!list.length) d = '';
-  addForm.value = { date: d, hours: null, minutes: null, shortReason: '', description: '' };
+  addForm.value = { date: d, start: '', end: '', shortReason: '', description: '', file: null };
 };
 
-const addParsedH = computed(() => {
-  const n = Number(addForm.value.hours);
-  return Number.isFinite(n) && n >= 0 ? n : 0;
+/** Start / end of the entry being added; an end of 00:00 means midnight (24:00). */
+const addRange = computed(() => {
+  const toMin = (v) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || ''));
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+  const startMin = toMin(addForm.value.start);
+  let endMin = toMin(addForm.value.end);
+  if (startMin === null || endMin === null) return { ok: false, message: 'Enter start and end' };
+  if (endMin === 0) endMin = 24 * 60;
+  if (endMin <= startMin) return { ok: false, message: 'End must be after start' };
+  return {
+    ok: true,
+    minutes: endMin - startMin,
+    start: addForm.value.start,
+    end: endMin === 24 * 60 ? '24:00' : addForm.value.end,
+  };
 });
-const addParsedM = computed(() => {
-  const n = Number(addForm.value.minutes);
-  return Number.isFinite(n) && n >= 0 ? n : 0;
-});
-const addFormTotalMinutes = computed(() =>
-  Math.max(0, Math.round(addParsedH.value * 60 + addParsedM.value))
-);
-const addFormNormalizedH = computed(() =>
-  addFormTotalMinutes.value > 0 ? Math.floor(addFormTotalMinutes.value / 60) : 0
-);
-const addFormNormalizedM = computed(() =>
-  addFormTotalMinutes.value > 0 ? addFormTotalMinutes.value % 60 : 0
-);
-const addFormNeedsNormalizeHint = computed(
-  () => addParsedM.value >= 60 || addParsedH.value % 1 !== 0
-);
-const addFormRawH = computed(() => addForm.value.hours ?? 0);
-const addFormRawM = computed(() => addForm.value.minutes ?? 0);
+const onAddScreenshot = (event) => {
+  const file = event.target.files?.[0] || null;
+  if (!file) {
+    addForm.value.file = null;
+    return;
+  }
+  if (!/^image\/(png|jpeg|webp)$/.test(file.type) || file.size > 5 * 1024 * 1024) {
+    toast.warning('Screenshot must be a PNG, JPG or WEBP image of 5 MB or smaller.');
+    event.target.value = '';
+    addForm.value.file = null;
+    return;
+  }
+  addForm.value.file = file;
+};
 
 const isDateInsideChartRange = (dateStr) => {
   if (!dateStr || !props.dateFrom || !props.dateTo) return false;
@@ -345,23 +362,30 @@ const submitAddTime = async () => {
     toast.warning(`Choose a date between ${props.dateFrom} and ${dateRangeLastInclusive.value}.`);
     return;
   }
-  const h = addParsedH.value;
-  const m = addParsedM.value;
-  if (h === 0 && m === 0) {
-    toast.warning('Enter hours or minutes greater than 0.');
+  const range = addRange.value;
+  if (!range.ok) {
+    toast.warning(`${range.message}.`);
     return;
   }
 
   addSubmitting.value = true;
   try {
-    await addWorkflowTime({
-      userId: props.chartUser.userId,
-      date,
-      hours: h,
-      minutes: m,
-      shortReason: addForm.value.shortReason,
-      description: addForm.value.description,
-    });
+    const fd = new FormData();
+    fd.append('userId', props.chartUser.userId);
+    fd.append('date', date);
+    fd.append(
+      'entries',
+      JSON.stringify([
+        {
+          start: range.start,
+          end: range.end,
+          shortReason: addForm.value.shortReason || '',
+          description: addForm.value.description || '',
+        },
+      ])
+    );
+    if (addForm.value.file) fd.append('screenshot_0', addForm.value.file, addForm.value.file.name);
+    await addWorkflowTime(fd);
     toast.success('Manual time added for this member and date.');
     emit('saved');
     resetAddForm();
@@ -1077,4 +1101,13 @@ const removeEntry = async (day, adj) => {
 .wmt-adj-status--pending { background: rgba(59, 130, 246, 0.14); color: rgb(37, 99, 235); }
 .wmt-adj-status--rejected { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
 .wmt-adj-by { margin: 2px 0 0; font-size: 0.75rem; opacity: 0.75; }
+
+.wmt-day-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.wmt-day-hubstaff { margin-left: auto; }
+.wmt-adj-range { margin: 2px 0 0; font-size: 0.78rem; font-weight: 600; }
+.wmt-adj-link { font-size: 0.78rem; font-weight: 600; color: rgb(37, 99, 235); text-decoration: none; }
+.wmt-adj-link:hover { text-decoration: underline; }
+.wmt-add-preview--err { color: #dc2626; }
+.wmt-add-shot input[type='file'] { font-size: 0.78rem; }
+.wmt-add-shot__name { font-size: 0.75rem; opacity: 0.75; overflow-wrap: anywhere; }
 </style>

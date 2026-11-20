@@ -429,6 +429,8 @@
           <router-link :to="{ name: 'MyProfile' }">My Profile</router-link>.
         </span>
       </div>
+      <!-- Two-weekly reminder: the Hubstaff organization ID (super admin / admins). -->
+      <HubstaffOrgBanner />
       <div v-if="reportRejectWarning.show" class="reject-global-banner">
         <span class="reject-global-banner__dot">!</span>
         <span>
@@ -455,6 +457,7 @@ import { useThemeAppearance } from '../composables/useThemeAppearance';
 import { canViewAuditLogs, hasAnyRole } from '../utils/permissions';
 import { ROLES, LEGACY_ROLES, isFinanceManagerRole, isFullAdminRole, normalizeRole, rolesOfUser, hasFinanceManagerRole } from '../constants/roles';
 import UserAvatar from '../components/UserAvatar.vue';
+import HubstaffOrgBanner from '../components/workflow/HubstaffOrgBanner.vue';
 import ReportNavSubmenu from '../components/navigation/ReportNavSubmenu.vue';
 import { getReportsByUser } from '../services/reports';
 import { REPORT_PERIODS, normalizeDateForPeriod, shiftPeriodDate } from '../utils/reportPeriod';

@@ -1,4 +1,7 @@
 import express from 'express';
+import multer from 'multer';
+import path from 'path';
+import { createModuleStorage } from '../middleware/upload.middleware.js';
 import { requireAuth, requireRole } from '../middleware/auth.middleware.js';
 import {
   getChartData,
@@ -20,6 +23,8 @@ import {
   deleteManualAdjustment,
   listPendingManualTime,
   reviewManualTime,
+  getHubstaffOrg,
+  updateHubstaffOrg,
 } from '../controllers/workflow.controller.js';
 
 const router = express.Router();
@@ -32,7 +37,27 @@ router.use(requireAuth);
 
 router.get('/chart', getChartData);
 router.get('/users', getWorkflowUsers);
-router.post('/add-time', requireRole('SUPER_ADMIN', 'GROUP_BOSS', 'ADMIN', 'BOSS'), addTime);
+/** Screenshots attached to added time: images only, up to 5 MB each. */
+const SCREENSHOT_EXTS = ['.png', '.jpg', '.jpeg', '.webp'];
+const screenshotUpload = multer({
+  storage: createModuleStorage('worktime_screenshots'),
+  limits: { fileSize: 5 * 1024 * 1024, files: 20 },
+  fileFilter: (req, file, cb) => {
+    const ok = SCREENSHOT_EXTS.includes(path.extname(file.originalname).toLowerCase()) && /^image\//.test(file.mimetype);
+    cb(ok ? null : new Error('Screenshots must be PNG, JPG or WEBP images'), ok);
+  },
+}).any();
+const withScreenshots = (req, res, next) =>
+  screenshotUpload(req, res, (err) => {
+    if (!err) return next();
+    const message = err.code === 'LIMIT_FILE_SIZE' ? 'Each screenshot must be 5 MB or smaller' : err.message;
+    return res.status(400).json({ ok: false, message });
+  });
+
+router.post('/add-time', requireRole('SUPER_ADMIN', 'GROUP_BOSS', 'ADMIN', 'BOSS'), withScreenshots, addTime);
+// Hubstaff organization ID (part of the Hubstaff links); it changes every two weeks.
+router.get('/hubstaff-org', getHubstaffOrg);
+router.put('/hubstaff-org', requireRole('SUPER_ADMIN'), updateHubstaffOrg);
 router.get('/targets', getWorktimeTargets);
 router.put('/targets', requireRole('SUPER_ADMIN'), upsertWorktimeTarget);
 router.delete('/targets/:userId/:month', requireRole('SUPER_ADMIN'), deleteWorktimeTarget);

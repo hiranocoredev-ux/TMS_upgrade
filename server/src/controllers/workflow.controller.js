@@ -1,4 +1,8 @@
 import mongoose from 'mongoose';
+import fs from 'fs';
+import { validateTimeRange, findOverlap, rangesOverlap, formatTimeOfDay } from '../utils/timeRanges.js';
+import HubstaffSettings from '../models/HubstaffSettings.js';
+import { orgIdDueDates, orgIdNeedsUpdate } from '../services/hubstaffOrg.js';
 import User from '../models/User.js';
 import Group from '../models/Group.js';
 import { getESTDateKey } from '../utils/estTime.js';
@@ -75,6 +79,9 @@ const adjustmentsForDayResponseFromWorklog = (worklog) => {
       addedByName: adj.addedByName || '',
       reviewedByName: adj.reviewedByName || '',
       rejectReason: adj.rejectReason || '',
+      startTime: adj.startTime || '',
+      endTime: adj.endTime || '',
+      screenshotUrl: adj.screenshotUrl || '',
     }));
   }
   const addOnly = Math.max(0, Math.floor(Number(worklog.add_time) || 0));
@@ -91,6 +98,9 @@ const adjustmentsForDayResponseFromWorklog = (worklog) => {
       addedByName: '',
       reviewedByName: '',
       rejectReason: '',
+      startTime: '',
+      endTime: '',
+      screenshotUrl: '',
     },
   ];
 };
@@ -289,78 +299,103 @@ export const getWorkflowUsers = async (req, res) => {
 };
 
 /**
- * POST /api/workflow/add-time
- * Body: { userId, date, hours, minutes, description? }
+ * POST /api/workflow/add-time   (JSON, or multipart when screenshots are attached)
+ * Body: { userId, date, entries: [{ start: "HH:MM", end: "HH:MM", shortReason?, description? }] }
+ *   Multipart: `entries` is a JSON string; the screenshot of entry i is the file
+ *   field `screenshot_<i>` (images only).
+ * Legacy body (scripts): { userId, date, hours, minutes, shortReason?, description? }
  *
- * Upserts a Worklog for (user_id, day). Accumulates add_time.
- * Date is normalized to UTC midnight  findOne uses a day-range to be
- * tolerant of the existing rows (which store dates at local-midnight in UTC).
+ * Each entry's time is end - start (00:00–24:00 on that day). Entries may not
+ * overlap each other or the day's existing ranged entries (rejected ones aside).
+ * Super admin / admin entries count at once; a group boss's wait for approval.
  */
+const removeUploadedFiles = (req) => {
+  for (const f of Array.isArray(req.files) ? req.files : []) {
+    fs.promises.unlink(f.path).catch(() => {});
+  }
+};
+
+const parseEntriesInput = (raw) => {
+  if (raw == null || raw === '') return null;
+  if (Array.isArray(raw)) return raw;
+  try {
+    const parsed = JSON.parse(String(raw));
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
+const MAX_ENTRIES_PER_REQUEST = 20;
+
 export const addTime = async (req, res) => {
+  const fail = (status, message) => {
+    removeUploadedFiles(req);
+    return res.status(status).json({ ok: false, message });
+  };
   try {
     const { userId, date, hours, minutes, description = '', shortReason = '' } = req.body;
 
-    if (!userId) {
-      return res.status(400).json({ ok: false, message: 'userId is required' });
-    }
-    if (!date) {
-      return res.status(400).json({ ok: false, message: 'date is required' });
-    }
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return res.status(400).json({ ok: false, message: 'Invalid date format. Use YYYY-MM-DD' });
+    if (!userId) return fail(400, 'userId is required');
+    if (!date) return fail(400, 'date is required');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return fail(400, 'Invalid date format. Use YYYY-MM-DD');
+
+    // Build the list of entries: start–end ranges, or one legacy hours/minutes entry.
+    const rawEntries = parseEntriesInput(req.body.entries);
+    const filesByField = new Map((Array.isArray(req.files) ? req.files : []).map((f) => [f.fieldname, f]));
+    const entries = [];
+    if (rawEntries) {
+      if (!rawEntries.length) return fail(400, 'Add at least one time entry');
+      if (rawEntries.length > MAX_ENTRIES_PER_REQUEST) return fail(400, `At most ${MAX_ENTRIES_PER_REQUEST} entries at once`);
+      for (let i = 0; i < rawEntries.length; i += 1) {
+        const e = rawEntries[i] || {};
+        const range = validateTimeRange(e.start, e.end);
+        if (!range.ok) return fail(400, `Entry ${i + 1}: ${range.message}`);
+        const file = filesByField.get(`screenshot_${i}`);
+        entries.push({
+          ...range,
+          shortReason: String(e.shortReason || '').trim().slice(0, 120),
+          description: String(e.description || '').trim().slice(0, 4000),
+          screenshotUrl: file ? `/uploads/worktime_screenshots/${file.filename}` : '',
+        });
+      }
+      const clash = findOverlap(entries);
+      if (clash) return fail(400, `Entries overlap: ${clash[0].start}–${clash[0].end} and ${clash[1].start}–${clash[1].end}`);
+    } else {
+      const h = Number(hours) || 0;
+      const m = Number(minutes) || 0;
+      if (h < 0) return fail(400, 'hours must be non-negative');
+      if (m < 0) return fail(400, 'minutes must be non-negative');
+      if (h === 0 && m === 0) return fail(400, 'Time must be greater than 0');
+      entries.push({
+        seconds: h * 3600 + m * 60,
+        start: '',
+        end: '',
+        shortReason: String(shortReason || '').trim().slice(0, 120),
+        description: String(description || '').trim(),
+        screenshotUrl: '',
+      });
     }
 
-    const h = Number(hours) || 0;
-    const m = Number(minutes) || 0;
-
-    if (h < 0) return res.status(400).json({ ok: false, message: 'hours must be non-negative' });
-    if (m < 0) return res.status(400).json({ ok: false, message: 'minutes must be non-negative' });
-    if (h === 0 && m === 0) {
-      return res.status(400).json({ ok: false, message: 'Time must be greater than 0' });
-    }
-
-    /** Allow minutes ≥ 60 (e.g. 250m) as well as split hours + minutes (e.g. 4h 10m). */
-    const addSeconds = h * 3600 + m * 60;
-    const displayH = Math.floor(addSeconds / 3600);
-    const displayM = Math.floor((addSeconds % 3600) / 60);
-
-    if (!mongoose.Types.ObjectId.isValid(String(userId))) {
-      return res.status(400).json({ ok: false, message: 'Invalid userId' });
-    }
+    if (!mongoose.Types.ObjectId.isValid(String(userId))) return fail(400, 'Invalid userId');
     const user = await User.findById(userId).select('name hubstaff_id group').lean();
-    if (!user) {
-      return res.status(404).json({ ok: false, message: 'User not found' });
-    }
+    if (!user) return fail(404, 'User not found');
 
     // Super admin / admin: counts at once. Group boss: only for their own
     // group's members, and it waits for a super admin / admin to approve it.
     const actorRole = normalizeRole(req.user?.role, req.user?.degree);
     const actorIsFullAdmin = isFullAdminRole(req.user?.role, req.user?.degree);
     if (!actorIsFullAdmin) {
-      if (actorRole !== ROLES.GROUP_BOSS) {
-        return res.status(403).json({ ok: false, message: 'You are not allowed to add time' });
-      }
+      if (actorRole !== ROLES.GROUP_BOSS) return fail(403, 'You are not allowed to add time');
       const actorGroup = String(req.user?.group ?? '').trim();
       if (!actorGroup || actorGroup === '*' || String(user.group ?? '').trim() !== actorGroup) {
-        return res.status(403).json({
-          ok: false,
-          message: 'Group bosses can only add time for members of their own group',
-        });
+        return fail(403, 'Group bosses can only add time for members of their own group');
       }
     }
     const entryStatus = actorIsFullAdmin ? ADJ_STATUS.APPROVED : ADJ_STATUS.PENDING;
-    if (!user.hubstaff_id) {
-      return res.status(400).json({
-        ok: false,
-        message: 'User must have a Hubstaff ID before manual time can be added',
-      });
-    }
+    if (!user.hubstaff_id) return fail(400, 'User must have a Hubstaff ID before manual time can be added');
 
-    let worklog = await Worklog.findOne({
-      member: String(user.hubstaff_id),
-      date: date,
-    });
-
+    let worklog = await Worklog.findOne({ member: String(user.hubstaff_id), date });
     if (!worklog) {
       worklog = new Worklog({
         member: String(user.hubstaff_id),
@@ -373,31 +408,52 @@ export const addTime = async (req, res) => {
       });
     }
 
-    migrateLegacyManualAddTimeToLineItemsIfNeeded(worklog);
-    worklog.manualAdjustments.push({
-      seconds: addSeconds,
-      description: String(description || '').trim(),
-      shortReason: String(shortReason || '').trim().slice(0, 120),
-      status: entryStatus,
-      addedByUserId: req.user?._id || undefined,
-      addedByName: String(req.user?.name || ''),
-      addedByRole: actorRole || '',
-    });
-    syncManualTotalsIntoWorklog(worklog);
-    if (entryStatus === ADJ_STATUS.APPROVED && String(description || '').trim()) {
-      worklog.note = String(description).trim();
+    // No overlap with the day's existing ranges either (rejected ones do not count).
+    const existingRanges = (worklog.manualAdjustments || [])
+      .filter((adj) => adjustmentStatusOf(adj) !== ADJ_STATUS.REJECTED && adj.startTime && adj.endTime)
+      .map((adj) => validateTimeRange(adj.startTime, adj.endTime))
+      .filter((r) => r.ok);
+    for (const e of entries.filter((x) => x.start)) {
+      const hit = existingRanges.find((r) => rangesOverlap(r, e));
+      if (hit) {
+        return fail(400, `${e.start}–${e.end} overlaps time already added for ${user.name} on ${date} (${hit.start}–${hit.end})`);
+      }
     }
+
+    migrateLegacyManualAddTimeToLineItemsIfNeeded(worklog);
+    for (const e of entries) {
+      worklog.manualAdjustments.push({
+        seconds: e.seconds,
+        description: e.description,
+        shortReason: e.shortReason,
+        startTime: e.start,
+        endTime: e.end,
+        screenshotUrl: e.screenshotUrl,
+        status: entryStatus,
+        addedByUserId: req.user?._id || undefined,
+        addedByName: String(req.user?.name || ''),
+        addedByRole: actorRole || '',
+      });
+    }
+    syncManualTotalsIntoWorklog(worklog);
+    const lastDescription = [...entries].reverse().find((e) => e.description)?.description;
+    if (entryStatus === ADJ_STATUS.APPROVED && lastDescription) worklog.note = lastDescription;
     await worklog.save();
 
+    const totalSeconds = entries.reduce((s, e) => s + e.seconds, 0);
+    const displayH = Math.floor(totalSeconds / 3600);
+    const displayM = Math.floor((totalSeconds % 3600) / 60);
     const pending = entryStatus === ADJ_STATUS.PENDING;
+    const what = `${displayH}h ${displayM}m${entries.length > 1 ? ` (${entries.length} entries)` : ''}`;
     res.json({
       ok: true,
-      data: { worklogId: worklog._id, status: entryStatus, pending },
+      data: { worklogId: worklog._id, status: entryStatus, pending, count: entries.length, totalSeconds },
       message: pending
-        ? `Submitted ${displayH}h ${displayM}m for ${user.name} on ${date} for approval`
-        : `Added ${displayH}h ${displayM}m for ${user.name} on ${date}`,
+        ? `Submitted ${what} for ${user.name} on ${date} for approval`
+        : `Added ${what} for ${user.name} on ${date}`,
     });
   } catch (err) {
+    removeUploadedFiles(req);
     console.error('workflow addTime error:', err.message);
     res.status(500).json({ ok: false, message: err.message });
   }
@@ -1027,6 +1083,17 @@ export const patchManualAdjustment = async (req, res) => {
       return res.status(404).json({ ok: false, message: 'Adjustment entry not found' });
     }
     sub.seconds = nextSeconds;
+    // A ranged entry keeps its start; the end follows the new length (cleared past 24:00).
+    if (sub.startTime) {
+      const startRange = validateTimeRange(sub.startTime, '24:00');
+      const endMin = startRange.ok ? startRange.startMin + Math.round(nextSeconds / 60) : null;
+      if (endMin !== null && endMin <= 24 * 60 && endMin > startRange.startMin) {
+        sub.endTime = formatTimeOfDay(endMin);
+      } else {
+        sub.startTime = '';
+        sub.endTime = '';
+      }
+    }
     sub.description = nextDesc;
     if (hasShortReason) sub.shortReason = nextShortReason;
     syncManualTotalsIntoWorklog(worklog);
@@ -1131,6 +1198,10 @@ export const listPendingManualTime = async (req, res) => {
           avatarUrl: u?.avatarUrl || '',
           addedByName: adj.addedByName || '',
           addedAt: adj.createdAt || null,
+          startTime: adj.startTime || '',
+          endTime: adj.endTime || '',
+          screenshotUrl: adj.screenshotUrl || '',
+          hubstaffId: String(w.member || ''),
         });
       }
     }
@@ -1218,6 +1289,48 @@ export const reviewManualTime = async (req, res) => {
         ? `Approved ${hrs}h ${mins}m on ${updated.date}`
         : `Rejected ${hrs}h ${mins}m on ${updated.date}`,
     });
+  } catch (err) {
+    return res.status(500).json({ ok: false, message: err.message });
+  }
+};
+
+/** The Hubstaff organization ID and its two-weekly reminder state. */
+const hubstaffOrgPayload = (doc) => {
+  const { currentDue, nextDue } = orgIdDueDates();
+  return {
+    organizationId: doc?.organizationId || '',
+    updatedAt: doc?.organizationIdUpdatedAt || null,
+    updatedByName: doc?.organizationIdUpdatedByName || '',
+    currentDue,
+    nextDue,
+    needsUpdate: orgIdNeedsUpdate(doc),
+  };
+};
+
+/** GET /api/workflow/hubstaff-org  (any signed-in user: the ID builds the Hubstaff links) */
+export const getHubstaffOrg = async (req, res) => {
+  try {
+    const doc = await HubstaffSettings.getSingleton();
+    return res.json({ ok: true, data: hubstaffOrgPayload(doc) });
+  } catch (err) {
+    return res.status(500).json({ ok: false, message: err.message });
+  }
+};
+
+/** PUT /api/workflow/hubstaff-org  { organizationId }  (super admin / admin) */
+export const updateHubstaffOrg = async (req, res) => {
+  try {
+    const organizationId = String(req.body?.organizationId ?? '').trim();
+    if (!/^\d{1,15}$/.test(organizationId)) {
+      return res.status(400).json({ ok: false, message: 'The organization ID is the number in the Hubstaff link (e.g. 795932)' });
+    }
+    const doc = await HubstaffSettings.getSingleton();
+    doc.organizationId = organizationId;
+    doc.organizationIdUpdatedAt = new Date();
+    doc.organizationIdUpdatedBy = req.user?._id || null;
+    doc.organizationIdUpdatedByName = String(req.user?.name || '');
+    await doc.save();
+    return res.json({ ok: true, data: hubstaffOrgPayload(doc), message: 'Hubstaff organization ID updated' });
   } catch (err) {
     return res.status(500).json({ ok: false, message: err.message });
   }

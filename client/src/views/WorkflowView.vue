@@ -191,6 +191,15 @@
               {{ finalSyncLoading ? 'Final Updating...' : 'Final Update' }}
             </button>
           </div>
+          <button
+            v-if="isFullAdmin"
+            type="button"
+            class="btn btn--hubstaff-org"
+            title="Hubstaff organization ID used in the Open in Hubstaff links (changes every two weeks)"
+            @click="changeHubstaffOrg"
+          >
+            Hubstaff org: {{ hubstaffOrg.organizationId || 'not set' }}
+          </button>
           <button v-if="canAddTime" class="btn btn--add" @click="openModal">＋ Add Time</button>
         </div>
       </div>
@@ -251,12 +260,23 @@
               <strong>{{ item.userName }}</strong>
               <span v-if="item.group" class="pending-row__group">Group {{ item.group }}</span>
               <span class="pending-row__dur">+{{ formatPendingDuration(item.seconds) }}</span>
+              <span v-if="item.startTime" class="pending-row__range">{{ item.startTime }}–{{ item.endTime }}</span>
               <span class="pending-row__date">{{ item.date }}</span>
             </div>
             <div class="pending-row__meta">
               <span v-if="item.shortReason">{{ item.shortReason }}</span>
               <span v-if="item.description" class="pending-row__desc">{{ item.description }}</span>
               <span v-if="item.addedByName" class="pending-row__by">Added by {{ item.addedByName }}</span>
+            </div>
+            <div class="pending-row__links">
+              <a v-if="item.screenshotUrl" :href="item.screenshotUrl" target="_blank" rel="noopener">Screenshot</a>
+              <a
+                v-if="hubstaffActivityUrl(item.hubstaffId, item.date)"
+                :href="hubstaffActivityUrl(item.hubstaffId, item.date)"
+                target="_blank"
+                rel="noopener"
+              >Open in Hubstaff ↗</a>
+              <span v-else-if="!hubstaffOrg.organizationId" class="pending-row__nolink">Set the Hubstaff organization ID to get a link</span>
             </div>
           </div>
           <div class="pending-row__actions">
@@ -431,62 +451,65 @@
               <TmsNativeCalendarField v-model="modalForm.date" type="date" class="form-input" />
             </div>
 
-            <!-- Hours / Minutes -->
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">Hours</label>
-                <input
-                  type="number"
-                  v-model.number="modalForm.hours"
-                  min="0"
-                  step="1"
-                  class="form-input"
-                  placeholder="0"
-                />
+            <!-- Time entries: start / end on the chosen day; the time is calculated -->
+            <div class="form-group">
+              <label class="form-label">Time entries</label>
+              <div class="entry-list">
+                <div v-for="(entry, idx) in modalForm.entries" :key="entry.key" class="entry-row">
+                  <div class="entry-row__head">
+                    <span class="entry-row__num">{{ idx + 1 }}</span>
+                    <span v-if="entryInfo(entry).ok" class="entry-row__dur">{{ formatMinutes(entryInfo(entry).minutes) }}</span>
+                    <span v-else-if="entry.start && entry.end" class="entry-row__err">{{ entryInfo(entry).message }}</span>
+                    <button
+                      v-if="modalForm.entries.length > 1"
+                      type="button"
+                      class="entry-row__remove"
+                      title="Remove this entry"
+                      @click="removeEntry(idx)"
+                    >✕</button>
+                  </div>
+                  <div class="entry-row__times">
+                    <label class="entry-field">
+                      <span>Start</span>
+                      <input v-model="entry.start" type="time" step="60" class="form-input" />
+                    </label>
+                    <label class="entry-field">
+                      <span>End</span>
+                      <input v-model="entry.end" type="time" step="60" class="form-input" />
+                    </label>
+                  </div>
+                  <input
+                    v-model="entry.shortReason"
+                    type="text"
+                    maxlength="120"
+                    class="form-input"
+                    placeholder="Short reason (shown on graph tooltip), e.g. Meeting"
+                  />
+                  <label class="entry-shot">
+                    <input type="file" accept="image/png,image/jpeg,image/webp" @change="onEntryScreenshot(entry, $event)" />
+                    <span class="entry-shot__btn">{{ entry.file ? 'Change screenshot' : 'Attach screenshot' }}</span>
+                    <span v-if="entry.file" class="entry-shot__name">{{ entry.file.name }}</span>
+                    <button v-if="entry.file" type="button" class="entry-shot__clear" @click.prevent="entry.file = null">Remove</button>
+                  </label>
+                </div>
               </div>
-              <div class="form-group">
-                <label class="form-label">Minutes</label>
-                <input
-                  type="number"
-                  v-model.number="modalForm.minutes"
-                  min="0"
-                  step="1"
-                  class="form-input"
-                  placeholder="0"
-                  title="May exceed 59 (e.g. 250 minutes is added correctly)"
-                />
-              </div>
+              <button type="button" class="btn-add-entry" @click="addEntry">＋ Add entry</button>
+              <p class="field-hint field-hint--modal">
+                Times are 00:00–24:00 on the chosen date; an end of 00:00 means midnight (24:00).
+                Entries may not overlap. Screenshot: PNG, JPG or WEBP, up to 5 MB (optional).
+              </p>
             </div>
-            <p class="field-hint field-hint--modal">
-              Enter time as hours plus minutes (e.g. 4 hours and 10 minutes), or put the full amount in minutes only (e.g. 250 minutes). Total is summed as hours × 60 + minutes.
-            </p>
 
             <!-- Total preview -->
             <div class="time-preview" v-if="modalTotalDurationMinutes > 0">
               Total added:
-              <strong>{{ modalNormalizedHours }}h {{ modalNormalizedMinutes }}m</strong>
-              <template v-if="modalDurationNeedsNormalize">
-                <span class="time-preview__raw">
-                  (from {{ modalRawHoursLabel }}h {{ modalRawMinutesLabel }}m input)
-                </span>
-              </template>
-            </div>
-
-            <!-- Short reason -->
-            <div class="form-group">
-              <label class="form-label">Short reason <span class="optional">(shown on graph tooltip)</span></label>
-              <input
-                v-model="modalForm.shortReason"
-                type="text"
-                maxlength="120"
-                class="form-input"
-                placeholder="e.g. Meeting, Onboarding"
-              />
+              <strong>{{ formatMinutes(modalTotalDurationMinutes) }}</strong>
+              <span v-if="modalEntriesOverlap" class="time-preview__raw">— entries overlap, please fix</span>
             </div>
 
             <!-- Description -->
             <div class="form-group">
-              <label class="form-label">Description <span class="optional">(optional)</span></label>
+              <label class="form-label">Description <span class="optional">(optional, for all entries)</span></label>
               <textarea
                 v-model="modalForm.description"
                 class="form-input form-textarea"
@@ -537,6 +560,7 @@ import {
 import TmsNativeCalendarField from '../components/ui/TmsNativeCalendarField.vue';
 import UserAvatar from '../components/UserAvatar.vue';
 import WorktimeMemberDetailModal from '../components/workflow/WorktimeMemberDetailModal.vue';
+import { useHubstaffOrg } from '../composables/useHubstaffOrg';
 import { getESTDateKey } from '../utils/timezoneHelpers';
 import { computeWorktimeMetrics } from '../utils/worktimeMetrics';
 import { useThemeAppearance } from '../composables/useThemeAppearance';
@@ -546,6 +570,27 @@ import { ROLES } from '../constants/roles';
 
 const toast = useToast();
 const { effectiveTheme } = useThemeAppearance();
+/** Links to a member's Hubstaff activity for a day (organization ID from settings). */
+const { hubstaffOrg, loadHubstaffOrg, saveHubstaffOrg, hubstaffActivityUrl } = useHubstaffOrg();
+/** Super admin / admin: change the Hubstaff organization ID at any time. */
+const changeHubstaffOrg = async () => {
+  const input = window.prompt(
+    'Hubstaff organization ID (the number after /organizations/ in the Hubstaff address):',
+    hubstaffOrg.value.organizationId || ''
+  );
+  if (input === null) return;
+  const id = input.trim();
+  if (!/^\d{1,15}$/.test(id)) {
+    toast.warning('Enter digits only, e.g. 795932.');
+    return;
+  }
+  try {
+    await saveHubstaffOrg(id);
+    toast.success(`Hubstaff organization ID saved (${id}).`);
+  } catch {
+    // Shown by the API interceptor.
+  }
+};
 const authStore = useAuthStore();
 
 /**
@@ -665,9 +710,7 @@ const modalForm = ref({
   userIds: [],
   applyToAll: false,
   date: todayStr(),
-  hours: null,
-  minutes: null,
-  shortReason: '',
+  entries: [{ key: 0, start: '', end: '', shortReason: '', file: null }],
   description: '',
 });
 const monthTargetsByUser = ref(new Map());
@@ -1501,34 +1544,60 @@ const selectedUsersCountText = computed(() => {
   return `Selected: ${modalForm.value.userIds.length} user(s)`;
 });
 
-/** Add-time modal: total minutes = hours×60 + minutes (minutes may exceed 59). */
-const modalParsedHours = computed(() => {
-  const n = Number(modalForm.value.hours);
-  return Number.isFinite(n) && n >= 0 ? n : 0;
-});
-const modalParsedMinutes = computed(() => {
-  const n = Number(modalForm.value.minutes);
-  return Number.isFinite(n) && n >= 0 ? n : 0;
-});
+/** Add-time entries: start / end ("HH:MM") on the chosen day; the time is end - start. */
+let entryKeySeq = 0;
+const newTimeEntry = () => ({ key: ++entryKeySeq, start: '', end: '', shortReason: '', file: null });
+const addEntry = () => {
+  modalForm.value.entries.push(newTimeEntry());
+};
+const removeEntry = (idx) => {
+  if (modalForm.value.entries.length > 1) modalForm.value.entries.splice(idx, 1);
+};
+const timeToMinutes = (value) => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(value || ''));
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+};
+/** Length and validity of one entry; an end of 00:00 means midnight (24:00). */
+const entryInfo = (entry) => {
+  const startMin = timeToMinutes(entry.start);
+  let endMin = timeToMinutes(entry.end);
+  if (startMin === null || endMin === null) return { ok: false, message: 'Enter start and end' };
+  if (endMin === 0) endMin = 24 * 60;
+  if (endMin <= startMin) return { ok: false, message: 'End must be after start' };
+  return {
+    ok: true,
+    startMin,
+    endMin,
+    minutes: endMin - startMin,
+    start: entry.start,
+    end: endMin === 24 * 60 ? '24:00' : entry.end,
+  };
+};
 const modalTotalDurationMinutes = computed(() =>
-  Math.max(0, Math.round(modalParsedHours.value * 60 + modalParsedMinutes.value))
+  modalForm.value.entries.reduce((sum, e) => {
+    const info = entryInfo(e);
+    return sum + (info.ok ? info.minutes : 0);
+  }, 0)
 );
-const modalNormalizedHours = computed(() =>
-  modalTotalDurationMinutes.value > 0 ? Math.floor(modalTotalDurationMinutes.value / 60) : 0
-);
-const modalNormalizedMinutes = computed(() =>
-  modalTotalDurationMinutes.value > 0 ? modalTotalDurationMinutes.value % 60 : 0
-);
-/** Show literal input vs canonical breakdown when minute field ≥ 60 or fractional hours are used */
-const modalDurationNeedsNormalize = computed(() => {
-  if (modalTotalDurationMinutes.value <= 0) return false;
-  if (modalParsedMinutes.value >= 60) return true;
-  const h = modalParsedHours.value;
-  return Number.isFinite(h) && h % 1 !== 0;
+const modalEntriesOverlap = computed(() => {
+  const ranges = modalForm.value.entries.map(entryInfo).filter((r) => r.ok).sort((a, b) => a.startMin - b.startMin);
+  return ranges.some((r, i) => i > 0 && r.startMin < ranges[i - 1].endMin);
 });
-
-const modalRawHoursLabel = computed(() => modalForm.value.hours ?? 0);
-const modalRawMinutesLabel = computed(() => modalForm.value.minutes ?? 0);
+const SCREENSHOT_MAX_BYTES = 5 * 1024 * 1024;
+const onEntryScreenshot = (entry, event) => {
+  const file = event.target.files?.[0] || null;
+  event.target.value = '';
+  if (!file) return;
+  if (!/^image\/(png|jpeg|webp)$/.test(file.type)) {
+    toast.warning('Screenshot must be a PNG, JPG or WEBP image.');
+    return;
+  }
+  if (file.size > SCREENSHOT_MAX_BYTES) {
+    toast.warning('Screenshot must be 5 MB or smaller.');
+    return;
+  }
+  entry.file = file;
+};
 
 watch(chartOrientation, async () => {
   await nextTick();
@@ -1558,9 +1627,7 @@ const openModal = async () => {
     userIds: [],
     applyToAll: false,
     date: dateFrom.value || todayStr(),
-    hours: null,
-    minutes: null,
-    shortReason: '',
+    entries: [newTimeEntry()],
     description: '',
   };
   showModal.value = true;
@@ -1572,7 +1639,7 @@ const closeModal = () => {
 };
 
 const handleAddTime = async () => {
-  const { userIds, applyToAll, date, hours, minutes, shortReason, description } = modalForm.value;
+  const { userIds, applyToAll, date, entries, description } = modalForm.value;
 
   const targetUserIds = applyToAll ? addTimeUsers.value.map((u) => u._id) : userIds;
   if (!targetUserIds.length) {
@@ -1583,18 +1650,43 @@ const handleAddTime = async () => {
     toast.warning('Please select a date.');
     return;
   }
-  const h = Number(hours) || 0;
-  const m = Number(minutes) || 0;
-  if (h === 0 && m === 0) {
-    toast.warning('Please enter hours or minutes greater than 0.');
+  const infos = entries.map(entryInfo);
+  const badIndex = infos.findIndex((i) => !i.ok);
+  if (badIndex >= 0) {
+    toast.warning(`Entry ${badIndex + 1}: ${infos[badIndex].message}.`);
     return;
   }
+  if (modalEntriesOverlap.value) {
+    toast.warning('Entries overlap. Please fix the times.');
+    return;
+  }
+  /** One request per member: the entries as JSON plus each entry's screenshot. */
+  const buildPayload = (uid) => {
+    const fd = new FormData();
+    fd.append('userId', uid);
+    fd.append('date', date);
+    fd.append(
+      'entries',
+      JSON.stringify(
+        infos.map((info, i) => ({
+          start: info.start,
+          end: info.end,
+          shortReason: entries[i].shortReason || '',
+          description: description || '',
+        }))
+      )
+    );
+    entries.forEach((e, i) => {
+      if (e.file) fd.append(`screenshot_${i}`, e.file, e.file.name);
+    });
+    return fd;
+  };
 
   modalLoading.value = true;
   try {
     const results = await Promise.allSettled(
       targetUserIds.map((uid) =>
-        addWorkflowTime({ userId: uid, date, hours: h, minutes: m, shortReason, description })
+        addWorkflowTime(buildPayload(uid))
       )
     );
     const fulfilled = results.filter((r) => r.status === 'fulfilled');
@@ -1627,6 +1719,7 @@ onMounted(() => {
   fetchMonthTarget();
   fetchFinalSyncStatus();
   fetchPendingManualTime();
+  loadHubstaffOrg();
   startAutoRefresh();
 });
 
@@ -2575,4 +2668,51 @@ onUnmounted(() => {
   .pending-row { flex-wrap: wrap; }
   .pending-row__actions { width: 100%; justify-content: flex-end; }
 }
+
+/* ── Add Time: start / end entries ── */
+.entry-list { display: flex; flex-direction: column; gap: 10px; }
+.entry-row {
+  display: flex; flex-direction: column; gap: 8px;
+  padding: 10px; border: 1px solid var(--wf-line); border-radius: 10px; background: var(--wf-elevated);
+}
+.entry-row__head { display: flex; align-items: center; gap: 8px; min-height: 22px; }
+.entry-row__num {
+  width: 22px; height: 22px; border-radius: 50%; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: .72rem; font-weight: 700; background: rgba(59, 130, 246, 0.15); color: rgb(37, 99, 235);
+}
+.entry-row__dur { font-weight: 700; color: rgb(37, 99, 235); font-size: .85rem; }
+.entry-row__err { color: #dc2626; font-size: .78rem; }
+.entry-row__remove {
+  margin-left: auto; border: none; background: transparent; color: var(--wf-muted);
+  font-size: .95rem; cursor: pointer; padding: 2px 6px; border-radius: 6px;
+}
+.entry-row__remove:hover { background: rgba(220, 38, 38, 0.1); color: #dc2626; }
+.entry-row__times { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.entry-field { display: flex; flex-direction: column; gap: 4px; font-size: .75rem; font-weight: 600; color: var(--wf-muted); }
+.entry-shot { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: .8rem; cursor: pointer; }
+.entry-shot input[type='file'] { display: none; }
+.entry-shot__btn {
+  padding: 4px 10px; border: 1px dashed var(--wf-line); border-radius: 8px; color: rgb(37, 99, 235); font-weight: 600;
+}
+.entry-shot__name { color: var(--wf-muted); overflow-wrap: anywhere; }
+.entry-shot__clear { border: none; background: none; color: #dc2626; cursor: pointer; font-size: .78rem; }
+.btn-add-entry {
+  margin-top: 8px; align-self: flex-start; padding: 6px 12px; border-radius: 8px;
+  border: 1px dashed rgba(59, 130, 246, 0.6); background: transparent; color: rgb(37, 99, 235);
+  font-weight: 600; cursor: pointer;
+}
+.btn-add-entry:hover { background: rgba(59, 130, 246, 0.08); }
+.pending-row__range { font-size: .78rem; font-weight: 600; }
+.pending-row__links { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: .78rem; margin-top: 2px; }
+.pending-row__links a { color: rgb(37, 99, 235); font-weight: 600; text-decoration: none; }
+.pending-row__links a:hover { text-decoration: underline; }
+.pending-row__nolink { color: var(--wf-muted); font-style: italic; }
+
+.btn--hubstaff-org {
+  background: transparent;
+  border: 1px solid rgba(59, 130, 246, 0.45);
+  color: rgb(37, 99, 235);
+}
+.btn--hubstaff-org:hover { background: rgba(59, 130, 246, 0.08); }
 </style>

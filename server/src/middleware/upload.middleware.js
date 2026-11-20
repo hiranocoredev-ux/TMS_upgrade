@@ -28,7 +28,8 @@ export const VALID_MODULES = [
   'job_tickets',
   'projects',
   'finance',
-  'avatars'
+  'avatars',
+  'worktime_screenshots'
 ];
 
 /**
