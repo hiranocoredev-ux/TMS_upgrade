@@ -1175,8 +1175,16 @@ export const listPendingManualTime = async (req, res) => {
       .lean();
 
     const members = [...new Set(logs.map((w) => String(w.member)))];
+    // Some databases store users' hubstaff_id as a number, others as text; match both.
+    const memberKeys = [
+      ...members,
+      ...members.filter((m) => /^\d+$/.test(m)).map(Number).filter(Number.isSafeInteger),
+    ];
+    // The raw collection, because Mongoose would turn the numbers back into text.
     const users = members.length
-      ? await User.find({ hubstaff_id: { $in: members } }).select('name group hubstaff_id avatarUrl').lean()
+      ? await User.collection
+          .find({ hubstaff_id: { $in: memberKeys } }, { projection: { name: 1, group: 1, hubstaff_id: 1, avatarUrl: 1 } })
+          .toArray()
       : [];
     const userByHub = new Map(users.map((u) => [String(u.hubstaff_id), u]));
 
