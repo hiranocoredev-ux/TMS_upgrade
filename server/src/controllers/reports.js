@@ -62,7 +62,8 @@ async function staffDocumentGroupOf(userId) {
     const owner = await User.findById(userId).select('role degree').lean();
     if (!owner) return null;
     const r = normalizeRole(owner.role, owner.degree);
-    if (r === ROLES.SYSTEM_ADMIN) return ADMIN_DOCUMENT_GROUP;
+    // The super admin's own plans sit with the admins' (no team, no finance targets).
+    if (r === ROLES.SYSTEM_ADMIN || r === ROLES.SUPER_ADMIN) return ADMIN_DOCUMENT_GROUP;
     if (r === ROLES.FINANCE_MANAGER) return FINANCE_DOCUMENT_GROUP;
     return null;
 }
@@ -245,6 +246,8 @@ export const updateReport = async (req, res) => {
                 return res.status(403).json({ message: 'Only the super admin can approve or reject admin and finance manager plans and reports' });
             }
             if (actorIsSuperAdmin && Number(state) === 5) nextState = 6;
+            // Nobody approves the super admin's own plan: submitting makes it final.
+            if (actorIsSuperAdmin && isSelfReport && Number(state) === 2) nextState = 6;
             docGroup = staffGroup;
         }
         // Date rules apply to whoever files their own plan or report.

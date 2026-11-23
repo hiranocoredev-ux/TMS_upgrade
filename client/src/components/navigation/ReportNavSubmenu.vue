@@ -28,7 +28,8 @@
             >
               <span>All admins</span>
             </router-link>
-            <template v-if="isSystemAdmin">
+            <!-- Admins and the super admin write their own plans (the super admin's need no approval). -->
+            <template v-if="isSystemAdmin || isSuperAdmin">
               <router-link
                 :to="{ name: period.plans.submit }"
                 class="nav-item nav-subitem nav-subitem-compact"

@@ -133,6 +133,8 @@ const router = createRouter({
             deniedForSuperAdmin: true,
             // Admins file their own plans and reports (admin plan tickets).
             allowForSystemAdmin: true,
+            // The super admin files their own plans too (final at once, no approval).
+            allowForSuperAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -147,6 +149,8 @@ const router = createRouter({
             deniedForSuperAdmin: true,
             // Admins file their own plans and reports (admin plan tickets).
             allowForSystemAdmin: true,
+            // The super admin files their own plans too (final at once, no approval).
+            allowForSuperAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -161,6 +165,8 @@ const router = createRouter({
             deniedForSuperAdmin: true,
             // Admins file their own plans and reports (admin plan tickets).
             allowForSystemAdmin: true,
+            // The super admin files their own plans too (final at once, no approval).
+            allowForSuperAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -218,6 +224,8 @@ const router = createRouter({
             deniedForSuperAdmin: true,
             // Admins file their own plans and reports (admin plan tickets).
             allowForSystemAdmin: true,
+            // The super admin files their own plans too (final at once, no approval).
+            allowForSuperAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -232,6 +240,8 @@ const router = createRouter({
             deniedForSuperAdmin: true,
             // Admins file their own plans and reports (admin plan tickets).
             allowForSystemAdmin: true,
+            // The super admin files their own plans too (final at once, no approval).
+            allowForSuperAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -246,6 +256,8 @@ const router = createRouter({
             deniedForSuperAdmin: true,
             // Admins file their own plans and reports (admin plan tickets).
             allowForSystemAdmin: true,
+            // The super admin files their own plans too (final at once, no approval).
+            allowForSuperAdmin: true,
             requiresRole: REPORT_AUTHOR_AND_HISTORY_ROLES,
           }
         },
@@ -821,8 +833,10 @@ router.beforeEach((to, from, next) => {
         /* ignore */
       }
     }
+    const authorRole = user ? normalizeRole(user.role, user.degree) : '';
     const adminAuthoring =
-      to.meta.allowForSystemAdmin && user && normalizeRole(user.role, user.degree) === ROLES.SYSTEM_ADMIN;
+      (to.meta.allowForSystemAdmin && authorRole === ROLES.SYSTEM_ADMIN) ||
+      (to.meta.allowForSuperAdmin && authorRole === ROLES.SUPER_ADMIN);
     if (user && isFullAdminRole(user.role, user.degree) && !adminAuthoring) {
       const period = to.meta.reportPeriod || 'daily';
       const isPlan = to.meta.documentKind === 'plan';

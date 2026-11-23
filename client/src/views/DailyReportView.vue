@@ -426,9 +426,16 @@ const staffAudience = computed(() => {
   // An Admin who is also a finance manager files ONE plan with both ticket sets.
   if (r === ROLES.SYSTEM_ADMIN) return hasFinanceManagerRole(authStore.user) ? 'admin+finance' : 'admin';
   if (r === ROLES.FINANCE_MANAGER) return 'finance';
+  // The super admin writes their own plans with the admin plan tickets.
+  if (r === ROLES.SUPER_ADMIN) return 'admin';
   return '';
 });
 const ticketAudience = computed(() => staffAudience.value || 'member');
+/** The super admin's own plans need no approval: submitting makes them final, and they stay editable. */
+const isSuperAdminAuthor = computed(
+  () => normalizeRole(authStore.user?.role, authStore.user?.degree) === ROLES.SUPER_ADMIN
+);
+const editableStates = computed(() => (isSuperAdminAuthor.value ? [0, 1, 2, 3, 4, 6] : [0, 1, 2, 3, 4]));
 const documentGroup = computed(() => {
   if (staffAudience.value === 'admin' || staffAudience.value === 'admin+finance') return 'ADMIN';
   if (staffAudience.value === 'finance') return 'FINANCE';
@@ -510,8 +517,8 @@ const viewMode = ref('edit');
 const STORAGE_KEY = computed(() => `${period.value}_titles_${authStore.user?.id || 'anon'}`);
 
 /** Draft + pending + rejected: member can edit. States 5–6 are read-only (awaiting team boss / final). */
-const showActions = computed(() => [0, 1, 2, 3, 4].includes(state.value));
-const isEditable = computed(() => [0, 1, 2, 3, 4].includes(state.value));
+const showActions = computed(() => editableStates.value.includes(state.value));
+const isEditable = computed(() => editableStates.value.includes(state.value));
 const useDocumentLayout = computed(() => !isEditable.value || viewMode.value === 'document');
 const isPlanMode = computed(() => kindPeriodLayout.value && isPlanKind(documentKind.value));
 const usePlanTicketsComposer = computed(() => isPlanMode.value && !useDocumentLayout.value);
@@ -537,7 +544,7 @@ const reportTicketValidation = ref([]);
 const statusLabel = computed(() => {
   switch (state.value) {
     case 6:
-      return 'Approved';
+      return isSuperAdminAuthor.value ? 'Final · no approval needed' : 'Approved';
     case 5:
       return 'Awaiting team approval';
     case 2:
